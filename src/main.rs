@@ -15,18 +15,11 @@ fn main() {
       DefaultPlugins.set(ImagePlugin::default_nearest()),
       WorldInspectorPlugin::default(),
     ))
+    .insert_resource(GameTimer(Timer::from_seconds(1.0, TimerMode::Repeating)))
     .add_systems(Startup, setup)
-    // .add_systems(Update, (rotate,))
+    .add_systems(Update, update)
     .run();
 }
-
-/// A marker component for our shapes so we can query them separately from the ground plane
-#[derive(Component)]
-struct Shape;
-
-const SHAPES_X_EXTENT: f32 = 14.0;
-const EXTRUSION_X_EXTENT: f32 = 16.0;
-const Z_EXTENT: f32 = 5.0;
 
 fn setup(
   mut commands: Commands,
@@ -54,27 +47,6 @@ fn setup(
     ));
   }
 
-  // // cube
-  // {
-  //   fn place_at(x: u32, y: u32) -> Transform {
-  //     // TODO: de-hardcode
-  //     Transform::from_xyz(-(y as f32) - 0.5 - 1.0, 0.0, (x as f32) + 0.5 + 1.0)
-  //   }
-
-  //   let debug_material = materials.add(StandardMaterial {
-  //     base_color_texture: Some(images.add(uv_debug_texture())),
-  //     ..default()
-  //   });
-
-  //   let mesh = meshes.add(Cuboid::from_size(Vec3::new(1., 1., 1.)));
-  //   commands.spawn((
-  //     Mesh3d(mesh),
-  //     MeshMaterial3d(debug_material.clone()),
-  //     place_at(8, 1),
-  //     Shape,
-  //   ));
-  // }
-
   commands.spawn((
     Camera3d::default(),
     // TODO: de-hardcode (should look at the center of the grid)
@@ -100,7 +72,38 @@ fn setup(
 
   commands.insert_resource(SnakeAssets(snake_material, snake_mesh));
 
-  spawn_snake(&mut commands, 0, 4);
+  spawn_snake(&mut commands, 4);
+}
+
+#[derive(Resource)]
+struct GameTimer(Timer);
+
+fn update(
+  time: Res<Time>,
+  mut timer: ResMut<GameTimer>,
+  mut snakes: Query<&mut Snake>,
+  mut commands: Commands,
+  mut part_transform: Query<&mut Transform>,
+) {
+  if timer.0.tick(time.delta()).just_finished() {
+    for mut snake in &mut snakes {
+      // TODO: other directions and change direction of parts depending on previous ones
+      for (entity, direction, x, y) in &mut snake.parts {
+        match direction {
+          Direction::Right => {
+            *x += 1;
+          }
+          _ => {
+            todo!();
+          }
+        }
+
+        // let mut entity = commands.entity(*entity);
+        let mut transform = part_transform.get_mut(*entity).unwrap();
+        *transform = place_at(*x, *y);
+      }
+    }
+  }
 }
 
 fn uv_debug_texture() -> Image {
@@ -207,52 +210,74 @@ fn grid_texture() -> Image {
   )
 }
 
-fn spawn_snake_part(commands: &mut Commands, snake: &mut Snake, x: u32, y: u32) {
-  fn place_at(x: u32, y: u32) -> Transform {
-    // TODO: de-hardcode
-    Transform::from_xyz(-(y as f32) - 0.5 - 1.0, 0.0, (x as f32) + 0.5 + 1.0)
-  }
+fn spawn_snake_part(
+  commands: &mut Commands,
+  (snake, snake_id): (&mut Snake, Entity),
+  x: u32,
+  y: u32,
+  direction: Direction,
+) {
+  let part_id = commands.spawn_empty().id();
+  snake.parts.push((part_id, direction, x, y));
 
   commands.queue(move |world: &mut World| {
+    // TODO: is it really needed?
+    if world.get_entity(snake_id).is_err() {
+      error!("failed to spawn snake (id: {snake_id:?}) part");
+      world.despawn(part_id);
+      return;
+    }
+
     let SnakeAssets(material, mesh) = world.resource::<SnakeAssets>().clone();
 
-    let entity = world.spawn((
-      Mesh3d(mesh),
-      MeshMaterial3d(material),
-      place_at(x, y),
-      Shape,
-    ));
-    snake.parts.push(entity.id());
+    let mut part = world.entity_mut(part_id);
+    part.insert((Mesh3d(mesh), MeshMaterial3d(material), place_at(x, y)));
   });
 }
 
-fn spawn_snake(commands: &mut Commands, id: u8, len: u32) {
-  let mut snake = Snake {
-    id,
-    parts: vec![],
-  };
+fn spawn_snake(commands: &mut Commands, len: u32) {
+  let snake_id = commands.spawn_empty().id();
+  let mut snake_component = Snake { parts: vec![] };
 
-  spawn_snake_part(commands, &mut snake, len - 1, 0);
+  spawn_snake_part(
+    commands,
+    (&mut snake_component, snake_id),
+    len - 1,
+    0,
+    Direction::Right,
+  );
 
-  // TODO: use commands.spawn_batch
-  for idx in 0..=(len - 2) {
-    spawn_snake_part(commands, &mut snake, idx, 0);
+  // TODO: use commands.spawn_batch?
+  for idx in (0..=(len - 2)).rev() {
+    spawn_snake_part(
+      commands,
+      (&mut snake_component, snake_id),
+      idx,
+      0,
+      Direction::Right,
+    );
   }
 
-  commands.spawn(snake);
+  let mut snake = commands.entity(snake_id);
+  snake.insert(snake_component);
+}
+
+fn place_at(x: u32, y: u32) -> Transform {
+  // TODO: de-hardcode
+  Transform::from_xyz(-(y as f32) - 0.5 - 1.0, 0.0, (x as f32) + 0.5 + 1.0)
 }
 
 #[derive(Component)]
 struct Snake {
-  id: u8,
-  parts: Vec<Entity>,
+  parts: Vec<(Entity, Direction, u32, u32)>,
 }
 
-// #[derive(Component)]
-// struct SnakePart(Snake);
-
-// #[derive(Component)]
-// struct SnakeHead(Snake);
+enum Direction {
+  Top,
+  Bottom,
+  Left,
+  Right,
+}
 
 #[derive(Resource, Clone)]
 struct SnakeAssets(Handle<StandardMaterial>, Handle<Mesh>);
