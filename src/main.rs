@@ -1,5 +1,4 @@
 use bevy::{
-  color::palettes::{basic::SILVER, css::RED},
   prelude::*,
   render::{
     render_asset::RenderAssetUsages,
@@ -9,16 +8,37 @@ use bevy::{
 
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
+// how many cells from the bottom to the top and from the left to the right
+const CELLS: u32 = 20;
+
 fn main() {
   App::new()
     .add_plugins((
       DefaultPlugins.set(ImagePlugin::default_nearest()),
       WorldInspectorPlugin::default(),
     ))
-    .insert_resource(GameTimer(Timer::from_seconds(1.0, TimerMode::Repeating)))
+    .insert_resource(Time::<Fixed>::from_seconds(0.5))
     .add_systems(Startup, setup)
-    .add_systems(Update, update)
+    .add_systems(
+      FixedUpdate,
+      (
+        control_snake,
+        process_snake_movement,
+        process_snake_food,
+        test_sound,
+      )
+        .chain(),
+    )
     .run();
+}
+
+// TEST
+fn test_sound(sound: Query<&AudioSink, With<FoodSound>>) {
+  let Ok(sound) = sound.get_single() else {
+    return;
+  };
+
+  sound.play();
 }
 
 fn setup(
@@ -26,31 +46,29 @@ fn setup(
   mut meshes: ResMut<Assets<Mesh>>,
   mut images: ResMut<Assets<Image>>,
   mut materials: ResMut<Assets<StandardMaterial>>,
+  asset_server: Res<AssetServer>,
 ) {
   // the grid
-  {
-    let grid_material = materials.add(StandardMaterial {
-      // base_color: RED.into(),
-      base_color_texture: Some(images.add(grid_texture())),
-      ..default()
-    });
+  let grid_material = materials.add(StandardMaterial {
+    // base_color: RED.into(),
+    base_color_texture: Some(images.add(grid_texture())),
+    ..default()
+  });
 
-    // TODO: de-hardcode
-    let size = 12.0;
-    let offset = size / 2.0;
+  let size = (CELLS + 2) as f32;
+  let offset = size / 2.0;
 
-    commands.spawn((
-      Mesh3d(meshes.add(Plane3d::default().mesh().size(size, size))),
-      // MeshMaterial3d(materials.add(Color::from(SILVER))),
-      MeshMaterial3d(grid_material),
-      Transform::from_xyz(-offset, 0.0, offset),
-    ));
-  }
+  commands.spawn((
+    Mesh3d(meshes.add(Plane3d::default().mesh().size(size, size))),
+    // MeshMaterial3d(materials.add(Color::from(SILVER))),
+    MeshMaterial3d(grid_material),
+    Transform::from_xyz(-offset, 0.0, offset),
+  ));
 
   commands.spawn((
     Camera3d::default(),
-    // TODO: de-hardcode (should look at the center of the grid)
-    Transform::from_xyz(-6.0, 20., 6.0).looking_at(Vec3::new(-6.0, 0., 6.0), Vec3::X),
+    Transform::from_xyz(-offset, size * 1.5, offset)
+      .looking_at(Vec3::new(-offset, 0., offset), Vec3::X),
   ));
 
   commands.spawn((
@@ -72,36 +90,123 @@ fn setup(
 
   commands.insert_resource(SnakeAssets(snake_material, snake_mesh));
 
-  spawn_snake(&mut commands, 4);
+  spawn_snake(&mut commands, 8);
+
+  let food_sound = AudioPlayer::new(asset_server.load("sounds/smb_coin.wav"));
+  commands.spawn((food_sound, FoodSound));
 }
 
-#[derive(Resource)]
-struct GameTimer(Timer);
-
-fn update(
-  time: Res<Time>,
-  mut timer: ResMut<GameTimer>,
-  mut snakes: Query<&mut Snake>,
+fn process_snake_movement(
+  mut snakes: Query<(Entity, &mut Snake)>,
   mut commands: Commands,
   mut part_transform: Query<&mut Transform>,
 ) {
-  if timer.0.tick(time.delta()).just_finished() {
-    for mut snake in &mut snakes {
-      // TODO: other directions and change direction of parts depending on previous ones
-      for (entity, direction, x, y) in &mut snake.parts {
-        match direction {
-          Direction::Right => {
-            *x += 1;
-          }
-          _ => {
-            todo!();
-          }
-        }
+  for (snake_entity, mut snake) in &mut snakes {
+    let mut next_positions = vec![];
 
-        let mut transform = part_transform.get_mut(*entity).unwrap();
-        *transform = place_at(*x, *y);
+    {
+      let head = &snake.parts[0];
+      let (x, y) = (head.x, head.y);
+
+      let (next_x, next_y) = match head.direction {
+        Direction::Top => (x, y - 1),
+        Direction::Bottom => (x, y + 1),
+        Direction::Left => (x - 1, y),
+        Direction::Right => (x + 1, y),
+      };
+
+      next_positions.push((head.entity, next_x, next_y, None));
+    }
+
+    for window in snake.parts.windows(2) {
+      let [prev, current] = window else {
+        unreachable!();
+      };
+
+      let (next_x, next_y, next_direction) = if current.direction == prev.direction {
+        let (x, y) = (current.x, current.y);
+        let (next_x, next_y) = match current.direction {
+          Direction::Top => (x, y - 1),
+          Direction::Bottom => (x, y + 1),
+          Direction::Left => (x - 1, y),
+          Direction::Right => (x + 1, y),
+        };
+
+        (next_x, next_y, None)
+      } else {
+        let (x, y) = (current.x, current.y);
+        let (next_x, next_y) = match current.direction {
+          Direction::Top => (x, y - 1),
+          Direction::Bottom => (x, y + 1),
+          Direction::Left => (x - 1, y),
+          Direction::Right => (x + 1, y),
+        };
+
+        (next_x, next_y, Some(prev.direction))
+      };
+
+      next_positions.push((current.entity, next_x, next_y, next_direction));
+    }
+
+    for (entity, x, y, direction) in next_positions {
+      if !is_it_safe_to_move_there(x, y, &snake.parts) {
+        commands.entity(snake_entity).despawn();
+        for part in &snake.parts {
+          commands.entity(part.entity).despawn();
+        }
+        break;
+      }
+
+      // TODO: better impl
+      let part_idx = snake.parts.iter().position(|p| p.entity == entity).unwrap();
+      let part = &mut snake.parts[part_idx];
+      part.x = x;
+      part.y = y;
+      if let Some(direction) = direction {
+        part.direction = direction;
+      }
+
+      let mut transform = part_transform.get_mut(entity).unwrap();
+      *transform = place_at(x, y);
+    }
+  }
+}
+
+fn process_snake_food(
+  mut commands: Commands,
+  mut snakes: Query<&mut Snake>,
+  food: Query<(Entity, &Food)>,
+) {
+  for snake in &mut snakes {
+    let head = &snake.parts[0];
+    for (food_entity, food) in &food {
+      if food.x == head.x && food.y == head.y {
+        commands.entity(food_entity).despawn();
+        // TODO: play sound
       }
     }
+  }
+}
+
+// TEST
+// TODO: should only be available for debug
+fn control_snake(keyboard: Res<ButtonInput<KeyCode>>, mut snake: Query<&mut Snake>) {
+  let Ok(snake) = &mut snake.get_single_mut() else {
+    return;
+  };
+  let head = &mut snake.parts[0];
+
+  if keyboard.pressed(KeyCode::ArrowUp) && head.direction != Direction::Bottom {
+    head.direction = Direction::Top;
+  }
+  if keyboard.pressed(KeyCode::ArrowDown) && head.direction != Direction::Top {
+    head.direction = Direction::Bottom;
+  }
+  if keyboard.pressed(KeyCode::ArrowRight) && head.direction != Direction::Left {
+    head.direction = Direction::Right;
+  }
+  if keyboard.pressed(KeyCode::ArrowLeft) && head.direction != Direction::Right {
+    head.direction = Direction::Left;
   }
 }
 
@@ -148,23 +253,20 @@ fn uv_debug_texture() -> Image {
 }
 
 fn grid_texture() -> Image {
-  // how many cells from the bottom to the top and from the left to the right
-  const CELLS: usize = 10; // TODO: de-hardcode
-
-  const WIDTH: usize = CELLS
-        // left and right borders
-        + 2
-        // // borders between cells 
-        // + (CELLS - 1)
-        ;
+  const WIDTH: usize = CELLS as usize
+    // left and right borders
+    + 2
+    // // borders between cells 
+    // + (CELLS - 1)
+    ;
 
   const TEXTURE_SIZE: usize =
     // width
     WIDTH
-        // height
-        * WIDTH
-        // rgba
-        * 4;
+      // height
+      * WIDTH
+      // rgba
+      * 4;
 
   let mut texture_data = [0; TEXTURE_SIZE];
 
@@ -212,12 +314,17 @@ fn grid_texture() -> Image {
 fn spawn_snake_part(
   commands: &mut Commands,
   (snake, snake_id): (&mut Snake, Entity),
-  x: u32,
-  y: u32,
+  x: i32,
+  y: i32,
   direction: Direction,
 ) {
   let part_id = commands.spawn_empty().id();
-  snake.parts.push((part_id, direction, x, y));
+  snake.parts.push(SnakePart {
+    entity: part_id,
+    direction,
+    x,
+    y,
+  });
 
   commands.queue(move |world: &mut World| {
     // TODO: is it really needed?
@@ -234,14 +341,14 @@ fn spawn_snake_part(
   });
 }
 
-fn spawn_snake(commands: &mut Commands, len: u32) {
+fn spawn_snake(commands: &mut Commands, len: u8) {
   let snake_id = commands.spawn_empty().id();
   let mut snake_component = Snake { parts: vec![] };
 
   spawn_snake_part(
     commands,
     (&mut snake_component, snake_id),
-    len - 1,
+    len as i32 - 1,
     0,
     Direction::Right,
   );
@@ -251,7 +358,7 @@ fn spawn_snake(commands: &mut Commands, len: u32) {
     spawn_snake_part(
       commands,
       (&mut snake_component, snake_id),
-      idx,
+      idx as i32,
       0,
       Direction::Right,
     );
@@ -261,16 +368,42 @@ fn spawn_snake(commands: &mut Commands, len: u32) {
   snake.insert(snake_component);
 }
 
-fn place_at(x: u32, y: u32) -> Transform {
-  // TODO: de-hardcode
+fn place_at(x: i32, y: i32) -> Transform {
   Transform::from_xyz(-(y as f32) - 0.5 - 1.0, 0.0, (x as f32) + 0.5 + 1.0)
+}
+
+fn is_it_safe_to_move_there(x: i32, y: i32, snake_parts: &[SnakePart]) -> bool {
+  let cells = CELLS.try_into().unwrap();
+  let safe = x >= 0 && y >= 0 && x < cells && y < cells;
+  if !safe {
+    return safe;
+  }
+
+  for part in snake_parts {
+    if part.x == x && part.y == y {
+      return false;
+    }
+  }
+
+  true
 }
 
 #[derive(Component)]
 struct Snake {
-  parts: Vec<(Entity, Direction, u32, u32)>,
+  parts: Vec<SnakePart>,
 }
 
+struct SnakePart {
+  entity: Entity,
+  direction: Direction,
+
+  // position is stored in signed integers to avoid
+  // overflows in movement processing
+  x: i32,
+  y: i32,
+}
+
+#[derive(PartialEq, Clone, Copy)]
 enum Direction {
   Top,
   Bottom,
@@ -280,3 +413,12 @@ enum Direction {
 
 #[derive(Resource, Clone)]
 struct SnakeAssets(Handle<StandardMaterial>, Handle<Mesh>);
+
+#[derive(Component)]
+struct Food {
+  x: i32,
+  y: i32,
+}
+
+#[derive(Component)]
+struct FoodSound;
