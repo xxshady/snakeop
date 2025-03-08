@@ -98,7 +98,6 @@ fn update(
           }
         }
 
-        // let mut entity = commands.entity(*entity);
         let mut transform = part_transform.get_mut(*entity).unwrap();
         *transform = place_at(*x, *y);
       }
