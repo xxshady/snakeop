@@ -1,4 +1,6 @@
 use bevy::{
+  audio::PlaybackMode,
+  color::palettes::css::RED,
   prelude::*,
   render::{
     render_asset::RenderAssetUsages,
@@ -7,6 +9,7 @@ use bevy::{
 };
 
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
+use rand::Rng;
 
 // how many cells from the bottom to the top and from the left to the right
 const CELLS: u32 = 20;
@@ -17,28 +20,21 @@ fn main() {
       DefaultPlugins.set(ImagePlugin::default_nearest()),
       WorldInspectorPlugin::default(),
     ))
-    .insert_resource(Time::<Fixed>::from_seconds(0.5))
+    .insert_resource(Time::<Fixed>::from_seconds(0.2))
+    .insert_resource(OccupiedCells::default())
     .add_systems(Startup, setup)
+    .add_systems(Update, (control_snake,))
     .add_systems(
       FixedUpdate,
       (
-        control_snake,
         process_snake_movement,
         process_snake_food,
-        test_sound,
+        animate_food,
+        // debug_render_occupied_cells,
       )
         .chain(),
     )
     .run();
-}
-
-// TEST
-fn test_sound(sound: Query<&AudioSink, With<FoodSound>>) {
-  let Ok(sound) = sound.get_single() else {
-    return;
-  };
-
-  sound.play();
 }
 
 fn setup(
@@ -47,6 +43,7 @@ fn setup(
   mut images: ResMut<Assets<Image>>,
   mut materials: ResMut<Assets<StandardMaterial>>,
   asset_server: Res<AssetServer>,
+  mut occupied_cells: ResMut<OccupiedCells>,
 ) {
   // the grid
   let grid_material = materials.add(StandardMaterial {
@@ -67,7 +64,7 @@ fn setup(
 
   commands.spawn((
     Camera3d::default(),
-    Transform::from_xyz(-offset, size * 1.5, offset)
+    Transform::from_xyz(-offset + (-offset / 2.), size * 1.5, offset - (offset / 2.))
       .looking_at(Vec3::new(-offset, 0., offset), Vec3::X),
   ));
 
@@ -90,23 +87,34 @@ fn setup(
 
   commands.insert_resource(SnakeAssets(snake_material, snake_mesh));
 
-  spawn_snake(&mut commands, 8);
+  spawn_snake(&mut commands, &mut occupied_cells, 3);
 
-  let food_sound = AudioPlayer::new(asset_server.load("sounds/smb_coin.wav"));
-  commands.spawn((food_sound, FoodSound));
+  let food_sound_asset = asset_server.load("sounds/smb_coin.wav");
+  commands.insert_resource(FoodSoundAsset(food_sound_asset));
+
+  let food_material = materials.add(StandardMaterial {
+    base_color: RED.into(),
+    ..default()
+  });
+  let food_mesh = meshes.add(Cuboid::from_size(Vec3::new(1., 1., 1.)));
+
+  commands.insert_resource(FoodAssets(food_material, food_mesh));
+
+  spawn_food(&mut commands, &mut occupied_cells);
 }
 
 fn process_snake_movement(
   mut snakes: Query<(Entity, &mut Snake)>,
   mut commands: Commands,
   mut part_transform: Query<&mut Transform>,
+  mut occupied_cells: ResMut<OccupiedCells>,
 ) {
   for (snake_entity, mut snake) in &mut snakes {
     let mut next_positions = vec![];
 
     {
       let head = &snake.parts[0];
-      let (x, y) = (head.x, head.y);
+      let (x, y) = (head.pos.x, head.pos.y);
 
       let (next_x, next_y) = match head.direction {
         Direction::Top => (x, y - 1),
@@ -114,8 +122,12 @@ fn process_snake_movement(
         Direction::Left => (x - 1, y),
         Direction::Right => (x + 1, y),
       };
+      let next_pos = Pos {
+        x: next_x,
+        y: next_y,
+      };
 
-      next_positions.push((head.entity, next_x, next_y, None));
+      next_positions.push((head.entity, next_pos, None));
     }
 
     for window in snake.parts.windows(2) {
@@ -123,8 +135,8 @@ fn process_snake_movement(
         unreachable!();
       };
 
-      let (next_x, next_y, next_direction) = if current.direction == prev.direction {
-        let (x, y) = (current.x, current.y);
+      let (next_pos, next_direction) = if current.direction == prev.direction {
+        let (x, y) = (current.pos.x, current.pos.y);
         let (next_x, next_y) = match current.direction {
           Direction::Top => (x, y - 1),
           Direction::Bottom => (x, y + 1),
@@ -132,9 +144,15 @@ fn process_snake_movement(
           Direction::Right => (x + 1, y),
         };
 
-        (next_x, next_y, None)
+        (
+          Pos {
+            x: next_x,
+            y: next_y,
+          },
+          None,
+        )
       } else {
-        let (x, y) = (current.x, current.y);
+        let (x, y) = (current.pos.x, current.pos.y);
         let (next_x, next_y) = match current.direction {
           Direction::Top => (x, y - 1),
           Direction::Bottom => (x, y + 1),
@@ -142,14 +160,20 @@ fn process_snake_movement(
           Direction::Right => (x + 1, y),
         };
 
-        (next_x, next_y, Some(prev.direction))
+        (
+          Pos {
+            x: next_x,
+            y: next_y,
+          },
+          Some(prev.direction),
+        )
       };
 
-      next_positions.push((current.entity, next_x, next_y, next_direction));
+      next_positions.push((current.entity, next_pos, next_direction));
     }
 
-    for (entity, x, y, direction) in next_positions {
-      if !is_it_safe_to_move_there(x, y, &snake.parts) {
+    for (entity, next_pos, direction) in next_positions {
+      if !is_it_safe_to_there(DoWhat::Move, next_pos, &occupied_cells) {
         commands.entity(snake_entity).despawn();
         for part in &snake.parts {
           commands.entity(part.entity).despawn();
@@ -160,29 +184,69 @@ fn process_snake_movement(
       // TODO: better impl
       let part_idx = snake.parts.iter().position(|p| p.entity == entity).unwrap();
       let part = &mut snake.parts[part_idx];
-      part.x = x;
-      part.y = y;
+
+      deoccupy_cell(&mut occupied_cells, part.pos);
+      occupied_cells.push(OccupiedCell {
+        pos: next_pos,
+        by_whom: Who::Snake,
+      });
+
+      part.pos = next_pos;
       if let Some(direction) = direction {
         part.direction = direction;
       }
 
       let mut transform = part_transform.get_mut(entity).unwrap();
-      *transform = place_at(x, y);
+      *transform = place_at(next_pos);
     }
   }
 }
 
 fn process_snake_food(
   mut commands: Commands,
-  mut snakes: Query<&mut Snake>,
+  mut snakes: Query<(Entity, &mut Snake)>,
   food: Query<(Entity, &Food)>,
+  food_sound_asset: Res<FoodSoundAsset>,
+  mut occupied_cells: ResMut<OccupiedCells>,
 ) {
-  for snake in &mut snakes {
+  for (snake_entity, mut snake) in &mut snakes {
     let head = &snake.parts[0];
+    let head_pos = head.pos;
+
     for (food_entity, food) in &food {
-      if food.x == head.x && food.y == head.y {
-        commands.entity(food_entity).despawn();
-        // TODO: play sound
+      if **food != head_pos {
+        continue;
+      }
+
+      commands.entity(food_entity).despawn_recursive();
+      deoccupy_cell(&mut occupied_cells, **food);
+      commands.spawn((
+        AudioPlayer(food_sound_asset.clone()),
+        PlaybackSettings::DESPAWN,
+      ));
+
+      spawn_food(&mut commands, &mut occupied_cells);
+
+      {
+        let tail = snake.parts.last().unwrap();
+        let SnakePart { pos, direction, .. } = tail;
+        let (Pos { x, y }, direction) = (*pos, *direction);
+
+        let (new_x, new_y) = match direction {
+          Direction::Top => (x, y + 1),
+          Direction::Bottom => (x, y - 1),
+          Direction::Left => (x + 1, y),
+          Direction::Right => (x - 1, y),
+        };
+        let new_pos = Pos { x: new_x, y: new_y };
+
+        spawn_snake_part(
+          &mut commands,
+          &mut occupied_cells,
+          (&mut snake, snake_entity),
+          new_pos,
+          direction,
+        );
       }
     }
   }
@@ -207,6 +271,40 @@ fn control_snake(keyboard: Res<ButtonInput<KeyCode>>, mut snake: Query<&mut Snak
   }
   if keyboard.pressed(KeyCode::ArrowLeft) && head.direction != Direction::Right {
     head.direction = Direction::Left;
+  }
+}
+
+// fn debug_render_occupied_cells(
+//   mut commands: Commands,
+//   mut materials: ResMut<Assets<StandardMaterial>>,
+//   mut meshes: ResMut<Assets<Mesh>>,
+//   occupied_cells: Res<OccupiedCells>,
+//   entities: Query<Entity, With<OccupiedCellDebug>>,
+// ) {
+//   for entity in &entities {
+//     commands.entity(entity).despawn();
+//   }
+
+//   for cell in &**occupied_cells {
+//     let material = materials.add(StandardMaterial {
+//       base_color: Srgba::rgba_u8(50, 0, 255, 100).into(),
+//       alpha_mode: AlphaMode::Blend,
+//       ..default()
+//     });
+//     let mesh = meshes.add(Cuboid::from_size(Vec3::splat(1.3)));
+
+//     commands.spawn((
+//       OccupiedCellDebug,
+//       MeshMaterial3d(material),
+//       Mesh3d(mesh),
+//       place_at(cell.pos),
+//     ));
+//   }
+// }
+
+fn animate_food(time: Res<Time>, mut food: Query<&mut Transform, With<Food>>) {
+  for mut food in &mut food {
+    food.rotate_y(time.delta_secs() * 1.0);
   }
 }
 
@@ -313,43 +411,49 @@ fn grid_texture() -> Image {
 
 fn spawn_snake_part(
   commands: &mut Commands,
+  occupied: &mut OccupiedCells,
   (snake, snake_id): (&mut Snake, Entity),
-  x: i32,
-  y: i32,
+  pos: Pos,
   direction: Direction,
 ) {
   let part_id = commands.spawn_empty().id();
   snake.parts.push(SnakePart {
     entity: part_id,
     direction,
-    x,
-    y,
+    pos,
   });
 
+  occupied.push(OccupiedCell {
+    pos,
+    by_whom: Who::Snake,
+  });
+
+  // TODO: this is only was needed to avoid passing material and mesh asset handles explicitly :/
   commands.queue(move |world: &mut World| {
     // TODO: is it really needed?
     if world.get_entity(snake_id).is_err() {
-      error!("failed to spawn snake (id: {snake_id:?}) part");
-      world.despawn(part_id);
-      return;
+      panic!("failed to spawn snake (id: {snake_id:?}) part");
     }
 
     let SnakeAssets(material, mesh) = world.resource::<SnakeAssets>().clone();
 
     let mut part = world.entity_mut(part_id);
-    part.insert((Mesh3d(mesh), MeshMaterial3d(material), place_at(x, y)));
+    part.insert((Mesh3d(mesh), MeshMaterial3d(material), place_at(pos)));
   });
 }
 
-fn spawn_snake(commands: &mut Commands, len: u8) {
+fn spawn_snake(commands: &mut Commands, occupied: &mut OccupiedCells, len: u8) {
   let snake_id = commands.spawn_empty().id();
   let mut snake_component = Snake { parts: vec![] };
 
   spawn_snake_part(
     commands,
+    occupied,
     (&mut snake_component, snake_id),
-    len as i32 - 1,
-    0,
+    Pos {
+      x: len as i32 - 1,
+      y: 0,
+    },
     Direction::Right,
   );
 
@@ -357,9 +461,12 @@ fn spawn_snake(commands: &mut Commands, len: u8) {
   for idx in (0..=(len - 2)).rev() {
     spawn_snake_part(
       commands,
+      occupied,
       (&mut snake_component, snake_id),
-      idx as i32,
-      0,
+      Pos {
+        x: idx as i32,
+        y: 0,
+      },
       Direction::Right,
     );
   }
@@ -368,24 +475,92 @@ fn spawn_snake(commands: &mut Commands, len: u8) {
   snake.insert(snake_component);
 }
 
-fn place_at(x: i32, y: i32) -> Transform {
-  Transform::from_xyz(-(y as f32) - 0.5 - 1.0, 0.0, (x as f32) + 0.5 + 1.0)
+fn place_at(pos: Pos) -> Transform {
+  Transform::from_xyz(-(pos.y as f32) - 0.5 - 1.0, 0.0, (pos.x as f32) + 0.5 + 1.0)
 }
 
-fn is_it_safe_to_move_there(x: i32, y: i32, snake_parts: &[SnakePart]) -> bool {
+fn is_it_safe_to_there(what: DoWhat, pos: Pos, occupied: &OccupiedCells) -> bool {
+  let (x, y) = (pos.x, pos.y);
   let cells = CELLS.try_into().unwrap();
   let safe = x >= 0 && y >= 0 && x < cells && y < cells;
   if !safe {
     return safe;
   }
 
-  for part in snake_parts {
-    if part.x == x && part.y == y {
-      return false;
+  for cell in &**occupied {
+    if !(cell.pos.x == x && cell.pos.y == y) {
+      continue;
+    }
+
+    match what {
+      DoWhat::Spawn => {
+        return false;
+      }
+      DoWhat::Move => match cell.by_whom {
+        Who::Snake => {
+          return false;
+        }
+        Who::Food => {
+          return true;
+        }
+      },
     }
   }
 
   true
+}
+
+fn spawn_food(commands: &mut Commands, occupied: &mut OccupiedCells) {
+  let cells = CELLS.try_into().unwrap();
+
+  let pos = loop {
+    let pos = Pos {
+      x: rand::rng().random_range(0..cells),
+      y: rand::rng().random_range(0..cells),
+    };
+
+    if is_it_safe_to_there(DoWhat::Spawn, pos, occupied) {
+      break pos;
+    }
+  };
+
+  occupied.push(OccupiedCell {
+    pos,
+    by_whom: Who::Food,
+  });
+
+  // TODO: this is only was needed to avoid passing material and mesh asset handles explicitly :/
+  // (see also snake part spawn)
+  commands.queue(move |world: &mut World| {
+    let FoodAssets(material, mesh) = world.resource::<FoodAssets>().clone();
+
+    world
+      .spawn((
+        Food(pos),
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
+        place_at(pos).with_scale(Vec3::splat(0.5)),
+      ))
+      .with_child((
+        Transform::from_xyz(0.0, 3.0, 0.0),
+        PointLight {
+          intensity: 500_000.,
+          range: 5.,
+          color: Srgba::RED.into(),
+          shadows_enabled: false,
+          shadow_depth_bias: 0.,
+          ..default()
+        },
+      ));
+  });
+}
+
+fn deoccupy_cell(occupied_cells: &mut OccupiedCells, removed: Pos) {
+  let idx = occupied_cells
+    .iter()
+    .position(|cell| cell.pos == removed)
+    .unwrap();
+  occupied_cells.swap_remove(idx);
 }
 
 #[derive(Component)]
@@ -396,11 +571,7 @@ struct Snake {
 struct SnakePart {
   entity: Entity,
   direction: Direction,
-
-  // position is stored in signed integers to avoid
-  // overflows in movement processing
-  x: i32,
-  y: i32,
+  pos: Pos,
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -414,11 +585,43 @@ enum Direction {
 #[derive(Resource, Clone)]
 struct SnakeAssets(Handle<StandardMaterial>, Handle<Mesh>);
 
+#[derive(Component, Deref)]
+struct Food(Pos);
+
 #[derive(Component)]
-struct Food {
+struct FoodSound;
+
+#[derive(Resource, Deref)]
+struct FoodSoundAsset(Handle<AudioSource>);
+
+#[derive(Resource, Clone)]
+struct FoodAssets(Handle<StandardMaterial>, Handle<Mesh>);
+
+// position is stored in signed integers to avoid
+// overflows in movement processing
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Pos {
   x: i32,
   y: i32,
 }
 
+#[derive(Resource, Default, Deref, DerefMut)]
+struct OccupiedCells(Vec<OccupiedCell>);
+
+struct OccupiedCell {
+  pos: Pos,
+  by_whom: Who,
+}
+
 #[derive(Component)]
-struct FoodSound;
+struct OccupiedCellDebug;
+
+enum Who {
+  Snake,
+  Food,
+}
+
+enum DoWhat {
+  Move,
+  Spawn,
+}

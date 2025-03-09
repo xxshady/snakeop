@@ -13,7 +13,8 @@ opt-level = 3
 
 [dependencies]
 bevy-inspector-egui = "0.29.1"
+rand = "0.9.0"
 
 [dependencies.bevy]
 version = "0.15.3"
-features = ["dynamic_linking"]
+features = ["dynamic_linking", "wav"]
