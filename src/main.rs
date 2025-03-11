@@ -117,8 +117,8 @@ fn process_snake_movement(
       let (x, y) = (head.pos.x, head.pos.y);
 
       let (next_x, next_y) = match head.direction {
-        Direction::Top => (x, y - 1),
-        Direction::Bottom => (x, y + 1),
+        Direction::Up => (x, y - 1),
+        Direction::Down => (x, y + 1),
         Direction::Left => (x - 1, y),
         Direction::Right => (x + 1, y),
       };
@@ -138,8 +138,8 @@ fn process_snake_movement(
       let (next_pos, next_direction) = if current.direction == prev.direction {
         let (x, y) = (current.pos.x, current.pos.y);
         let (next_x, next_y) = match current.direction {
-          Direction::Top => (x, y - 1),
-          Direction::Bottom => (x, y + 1),
+          Direction::Up => (x, y - 1),
+          Direction::Down => (x, y + 1),
           Direction::Left => (x - 1, y),
           Direction::Right => (x + 1, y),
         };
@@ -154,8 +154,8 @@ fn process_snake_movement(
       } else {
         let (x, y) = (current.pos.x, current.pos.y);
         let (next_x, next_y) = match current.direction {
-          Direction::Top => (x, y - 1),
-          Direction::Bottom => (x, y + 1),
+          Direction::Up => (x, y - 1),
+          Direction::Down => (x, y + 1),
           Direction::Left => (x - 1, y),
           Direction::Right => (x + 1, y),
         };
@@ -233,8 +233,8 @@ fn process_snake_food(
         let (Pos { x, y }, direction) = (*pos, *direction);
 
         let (new_x, new_y) = match direction {
-          Direction::Top => (x, y + 1),
-          Direction::Bottom => (x, y - 1),
+          Direction::Up => (x, y + 1),
+          Direction::Down => (x, y - 1),
           Direction::Left => (x + 1, y),
           Direction::Right => (x - 1, y),
         };
@@ -260,11 +260,11 @@ fn control_snake(keyboard: Res<ButtonInput<KeyCode>>, mut snake: Query<&mut Snak
   };
   let head = &mut snake.parts[0];
 
-  if keyboard.pressed(KeyCode::ArrowUp) && head.direction != Direction::Bottom {
-    head.direction = Direction::Top;
+  if keyboard.pressed(KeyCode::ArrowUp) && head.direction != Direction::Down {
+    head.direction = Direction::Up;
   }
-  if keyboard.pressed(KeyCode::ArrowDown) && head.direction != Direction::Top {
-    head.direction = Direction::Bottom;
+  if keyboard.pressed(KeyCode::ArrowDown) && head.direction != Direction::Up {
+    head.direction = Direction::Down;
   }
   if keyboard.pressed(KeyCode::ArrowRight) && head.direction != Direction::Left {
     head.direction = Direction::Right;
@@ -576,8 +576,8 @@ struct SnakePart {
 
 #[derive(PartialEq, Clone, Copy)]
 enum Direction {
-  Top,
-  Bottom,
+  Up,
+  Down,
   Left,
   Right,
 }
