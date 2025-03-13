@@ -1,6 +1,7 @@
 use bevy::{
   audio::PlaybackMode,
   color::palettes::css::RED,
+  pbr::VolumetricLight,
   prelude::*,
   render::{
     render_asset::RenderAssetUsages,
@@ -80,7 +81,7 @@ fn setup(
   ));
 
   let snake_material = materials.add(StandardMaterial {
-    base_color_texture: Some(images.add(uv_debug_texture())),
+    base_color: Srgba::GREEN.into(),
     ..default()
   });
   let snake_mesh = meshes.add(Cuboid::from_size(Vec3::new(1., 1., 1.)));
@@ -113,10 +114,14 @@ fn process_snake_movement(
     let mut next_positions = vec![];
 
     {
-      let head = &snake.parts[0];
+      let next_direction = snake.next_direction;
+      snake.direction = next_direction;
+      let head = &mut snake.parts[0];
+      head.direction = next_direction;
+
       let (x, y) = (head.pos.x, head.pos.y);
 
-      let (next_x, next_y) = match head.direction {
+      let (next_x, next_y) = match next_direction {
         Direction::Up => (x, y - 1),
         Direction::Down => (x, y + 1),
         Direction::Left => (x - 1, y),
@@ -258,19 +263,19 @@ fn control_snake(keyboard: Res<ButtonInput<KeyCode>>, mut snake: Query<&mut Snak
   let Ok(snake) = &mut snake.get_single_mut() else {
     return;
   };
-  let head = &mut snake.parts[0];
+  // let head = &mut snake.parts[0];
 
-  if keyboard.pressed(KeyCode::ArrowUp) && head.direction != Direction::Down {
-    head.direction = Direction::Up;
+  if keyboard.pressed(KeyCode::ArrowUp) && snake.direction != Direction::Down {
+    snake.next_direction = Direction::Up;
   }
-  if keyboard.pressed(KeyCode::ArrowDown) && head.direction != Direction::Up {
-    head.direction = Direction::Down;
+  if keyboard.pressed(KeyCode::ArrowDown) && snake.direction != Direction::Up {
+    snake.next_direction = Direction::Down;
   }
-  if keyboard.pressed(KeyCode::ArrowRight) && head.direction != Direction::Left {
-    head.direction = Direction::Right;
+  if keyboard.pressed(KeyCode::ArrowRight) && snake.direction != Direction::Left {
+    snake.next_direction = Direction::Right;
   }
-  if keyboard.pressed(KeyCode::ArrowLeft) && head.direction != Direction::Right {
-    head.direction = Direction::Left;
+  if keyboard.pressed(KeyCode::ArrowLeft) && snake.direction != Direction::Right {
+    snake.next_direction = Direction::Left;
   }
 }
 
@@ -306,48 +311,6 @@ fn animate_food(time: Res<Time>, mut food: Query<&mut Transform, With<Food>>) {
   for mut food in &mut food {
     food.rotate_y(time.delta_secs() * 1.0);
   }
-}
-
-fn uv_debug_texture() -> Image {
-  const TEXTURE_SIZE: usize = 4;
-
-  #[rustfmt::skip]
-    let texture_data: [u8; 64] = [
-        255, 255, 255, 255,
-        255, 255, 255, 255,
-        255, 255, 255, 255,
-        255, 255, 255, 255,
-        255, 255, 255, 255,
-        0, 0, 0, 0,
-        0, 0, 0, 0,
-        255, 255, 255, 255,
-        255, 255, 255, 255,
-        0, 0, 0, 0,
-        0, 0, 0, 0,
-        255, 255, 255, 255,
-        255, 255, 255, 255,
-        255, 255, 255, 255,
-        255, 255, 255, 255,
-        255, 255, 255, 255,
-    ];
-
-  // for y in 0..TEXTURE_SIZE {
-  //     let offset = TEXTURE_SIZE * y * 4;
-  //     texture_data[offset..(offset + TEXTURE_SIZE * 4)].copy_from_slice(&palette);
-  //     palette.rotate_right(4);
-  // }
-
-  Image::new_fill(
-    Extent3d {
-      width: TEXTURE_SIZE as u32,
-      height: TEXTURE_SIZE as u32,
-      depth_or_array_layers: 1,
-    },
-    TextureDimension::D2,
-    &texture_data,
-    TextureFormat::Rgba8UnormSrgb,
-    RenderAssetUsages::RENDER_WORLD,
-  )
 }
 
 fn grid_texture() -> Image {
@@ -444,7 +407,11 @@ fn spawn_snake_part(
 
 fn spawn_snake(commands: &mut Commands, occupied: &mut OccupiedCells, len: u8) {
   let snake_id = commands.spawn_empty().id();
-  let mut snake_component = Snake { parts: vec![] };
+  let mut snake_component = Snake {
+    parts: vec![],
+    direction: Direction::Right,
+    next_direction: Direction::Right,
+  };
 
   spawn_snake_part(
     commands,
@@ -542,15 +509,21 @@ fn spawn_food(commands: &mut Commands, occupied: &mut OccupiedCells) {
         place_at(pos).with_scale(Vec3::splat(0.5)),
       ))
       .with_child((
-        Transform::from_xyz(0.0, 3.0, 0.0),
-        PointLight {
-          intensity: 500_000.,
-          range: 5.,
+        Transform::from_xyz(0.0, 3.0, 0.0).looking_at(Vec3::ZERO, Dir3::Y),
+        SpotLight {
           color: Srgba::RED.into(),
-          shadows_enabled: false,
-          shadow_depth_bias: 0.,
+          intensity: 250000.,
+          range: 5.,
           ..default()
         },
+        // PointLight {
+        //   intensity: 500_000.,
+        //   range: 5.,
+        //   color: Srgba::RED.into(),
+        //   shadows_enabled: false,
+        //   shadow_depth_bias: 0.,
+        //   ..default()
+        // },
       ));
   });
 }
@@ -566,6 +539,11 @@ fn deoccupy_cell(occupied_cells: &mut OccupiedCells, removed: Pos) {
 #[derive(Component)]
 struct Snake {
   parts: Vec<SnakePart>,
+
+  // these states are needed here to prevent player killing them selves
+  // by changing direction two times before update (see control_snake)
+  direction: Direction,
+  next_direction: Direction,
 }
 
 struct SnakePart {
