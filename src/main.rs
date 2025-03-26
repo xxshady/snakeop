@@ -540,7 +540,7 @@ fn deoccupy_cell(occupied_cells: &mut OccupiedCells, removed: Pos) {
 struct Snake {
   parts: Vec<SnakePart>,
 
-  // these states are needed here to prevent player killing them selves
+  // these states are needed here to prevent player killing themselves
   // by changing direction two times before update (see control_snake)
   direction: Direction,
   next_direction: Direction,
