@@ -20,19 +20,17 @@ fn main() {
       DefaultPlugins.set(ImagePlugin::default_nearest()),
       WorldInspectorPlugin::default(),
     ))
-    .add_systems(Startup, setup)
-    .add_systems(Update, game::update)
-    .set_runner(fk::app_runner)
+    .add_systems(Startup, |world: &mut World| {
+      let return_world = fk::take_world(world);
+      game::setup();
+      return_world(world);
+    })
+    .add_systems(Update, |world: &mut World| {
+      let return_world = fk::take_world(world);
+      game::update();
+      return_world(world);
+    })
     .run();
-}
-
-fn setup(
-  mut commands: Commands,
-  mut meshes: ResMut<Assets<Mesh>>,
-  mut images: ResMut<Assets<Image>>,
-  mut materials: ResMut<Assets<StandardMaterial>>,
-  asset_server: Res<AssetServer>,
-) {
 }
 
 // TODO: should it also be rewritten?
