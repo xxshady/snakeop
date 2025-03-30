@@ -159,3 +159,19 @@ pub fn mut_entity_transform<R>(
     None
   })
 }
+
+#[derive(Clone)]
+pub struct AudioAsset(Handle<AudioSource>);
+
+pub fn load_asset(path: &str) -> AudioAsset {
+  use_world(|world| AudioAsset(world.load_asset(path)))
+}
+
+pub fn play_audio(asset: AudioAsset) -> Entity {
+  use_world(|world| {
+    world
+      .spawn((AudioPlayer(asset.0), PlaybackSettings::DESPAWN))
+      .id()
+      .into()
+  })
+}

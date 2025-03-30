@@ -4,8 +4,9 @@ use std::{
 };
 use crate::{
   fk::{
-    def, despawn, key_pressed, mut_entity_transform, spawn_camera, spawn_color_mesh, spawn_empty,
-    spawn_image_mesh, spawn_point_light, Entity, PointLight, Shape,
+    def, despawn, key_pressed, load_asset, mut_entity_transform, play_audio, spawn_camera,
+    spawn_color_mesh, spawn_empty, spawn_image_mesh, spawn_point_light, AudioAsset, Entity,
+    PointLight, Shape,
   },
   grid_texture, CELLS,
 };
@@ -23,24 +24,10 @@ struct State {
   occupied_cells: OccupiedCells,
   snakes: Vec<Snake>,
   food: Vec<Food>,
-}
-
-impl State {
-  fn new() -> Self {
-    Self {
-      last_update: Instant::now(),
-      since_last_update: Duration::ZERO,
-      since_last_fixed_update: Duration::ZERO,
-      occupied_cells: def(),
-      snakes: def(),
-      food: def(),
-    }
-  }
+  food_sound: AudioAsset,
 }
 
 pub fn setup() {
-  let mut state = State::new();
-
   let size = (CELLS + 2) as f32;
   let offset = size / 2.0;
 
@@ -67,15 +54,22 @@ pub fn setup() {
     },
   );
 
-  spawn_snake(&mut state.snakes, &mut state.occupied_cells, 3);
+  let (mut snakes, mut occupied_cells, mut food) = def();
+  spawn_snake(&mut snakes, &mut occupied_cells, 3);
 
-  // TODO: asset server + sounds for food
-  // let food_sound_asset = asset_server.load("sounds/smb_coin.wav");
-  // commands.insert_resource(FoodSoundAsset(food_sound_asset));
+  let food_sound = load_asset("sounds/smb_coin.wav");
 
-  spawn_food(&mut state.food, &mut state.occupied_cells);
+  spawn_food(&mut food, &mut occupied_cells);
 
-  STATE.set(Some(state));
+  STATE.set(Some(State {
+    last_update: Instant::now(),
+    since_last_update: Duration::ZERO,
+    since_last_fixed_update: Duration::ZERO,
+    occupied_cells,
+    snakes,
+    food,
+    food_sound,
+  }));
 }
 
 pub fn update() {
@@ -229,20 +223,25 @@ fn spawn_food(food: &mut Vec<Food>, occupied: &mut OccupiedCells) {
     Shape::Cuboid(Vec3::splat(1.)),
     (255, 0, 0, 255),
   );
-  food.push(Food { entity, pos });
 
-  // TODO: add child api BUT: is it really needed if snake parts are not children of snake?
-  // .with_child((
-  //   Transform::from_xyz(0.0, 3.0, 0.0).looking_at(Vec3::ZERO, Dir3::Y),
-  //   PointLight {
-  //     intensity: 500_000.,
-  //     range: 5.,
-  //     color: (255, 0, 0, 255),
-  //     shadows_enabled: false,
-  //     shadow_depth_bias: 0.,
-  //     ..def()
-  //   },
-  // ));
+  let light = spawn_point_light(
+    {
+      let mut transform = place_at(pos);
+      transform.translation.y += 3.0;
+      transform.translation.x -= 0.15;
+      transform.translation.z += 0.15;
+      transform
+    },
+    PointLight {
+      intensity: 220_000.,
+      range: 5.,
+      color: (255, 0, 0, 255),
+      shadows_enabled: false,
+      shadow_depth_bias: 0.,
+    },
+  );
+
+  food.push(Food { entity, pos, light });
 }
 
 fn deoccupy_cell(occupied_cells: &mut OccupiedCells, removed: Pos) {
@@ -280,6 +279,7 @@ enum Direction {
 struct Food {
   entity: Entity,
   pos: Pos,
+  light: Entity,
 }
 
 // position is stored in signed integers to avoid
@@ -455,13 +455,10 @@ fn process_snake_food(state: &mut State) {
 
     if let Some(food) = despawn_food {
       despawn(food.entity);
+      despawn(food.light);
       deoccupy_cell(&mut state.occupied_cells, food.pos);
 
-      // TODO: asset server + sounds for food
-      // commands.spawn((
-      //   AudioPlayer(food_sound_asset.clone()),
-      //   PlaybackSettings::DESPAWN,
-      // ));
+      play_audio(state.food_sound.clone());
 
       spawn_food(&mut state.food, &mut state.occupied_cells);
 

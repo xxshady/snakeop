@@ -1,5 +1,4 @@
 use bevy::{
-  color::palettes::css::RED,
   prelude::*,
   render::{
     render_asset::RenderAssetUsages,
