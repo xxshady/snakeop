@@ -4,31 +4,39 @@ use bevy::{
     render_asset::RenderAssetUsages,
     render_resource::{Extent3d, TextureDimension, TextureFormat},
   },
+  window::{ClosingWindow, WindowCloseRequested},
+  winit::WinitPlugin,
 };
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
+use fk_core::def;
+
+mod imports_impl;
 
 // how many cells from the bottom to the top and from the left to the right
 const CELLS: u32 = 20;
 
-mod fk;
-mod game;
-
 fn main() {
   App::new()
     .add_plugins((
-      DefaultPlugins.set(ImagePlugin::default_nearest()),
+      DefaultPlugins
+        .set(ImagePlugin::default_nearest())
+        .set(WindowPlugin {
+          close_when_requested: false,
+          ..def()
+        }),
       WorldInspectorPlugin::default(),
     ))
     .add_systems(Startup, |world: &mut World| {
       let return_world = fk::take_world(world);
-      game::setup();
+      // game::setup();
       return_world(world);
     })
     .add_systems(Update, |world: &mut World| {
       let return_world = fk::take_world(world);
-      game::update();
+      // game::update();
       return_world(world);
     })
+    .add_systems(Update, reload_on_window_close)
     .run();
 }
 
@@ -90,4 +98,15 @@ pub fn grid_texture() -> Image {
     TextureFormat::Rgba8UnormSrgb,
     RenderAssetUsages::RENDER_WORLD,
   )
+}
+
+fn reload_on_window_close(
+  mut close_events: EventReader<WindowCloseRequested>,
+  mut exit: EventWriter<AppExit>,
+) {
+  for event in close_events.read() {
+    // TEST
+    println!("Window close requested: {:?}", event);
+    // exit.send(AppExit::Success);
+  }
 }

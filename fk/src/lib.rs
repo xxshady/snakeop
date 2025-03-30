@@ -1,24 +1,30 @@
 use std::{cell::RefCell, mem};
 
-use bevy::prelude::*;
+use fk_core::*;
 
-pub fn def<T: Default>() -> T {
-  Default::default()
+use bevy::{
+  asset::{DirectAssetAccessExt, Handle},
+  audio::{AudioPlayer, AudioSource, PlaybackSettings},
+  color::Srgba,
+  core_pipeline::core_3d::Camera3d,
+  ecs::{entity::Entity as BevyEntity, world::World},
+  image::Image,
+  input::{keyboard::KeyCode, ButtonInput},
+  math::{
+    primitives::{Cuboid, Plane3d},
+    Vec3,
+  },
+  pbr::{MeshMaterial3d, StandardMaterial},
+  render::mesh::{Mesh, Mesh3d, Meshable},
+  transform::components::Transform,
+};
+
+pub fn entity_to_bevy(entity: Entity) -> BevyEntity {
+  BevyEntity::from_bits(entity.0)
 }
 
-#[derive(Clone, Copy, PartialEq)]
-pub struct Entity(u64);
-
-impl From<bevy::ecs::entity::Entity> for Entity {
-  fn from(entity: bevy::ecs::entity::Entity) -> Self {
-    Self(entity.to_bits())
-  }
-}
-
-impl From<Entity> for bevy::ecs::entity::Entity {
-  fn from(entity: Entity) -> Self {
-    Self::from_bits(entity.0)
-  }
+pub fn bevy_to_entity(bevy: BevyEntity) -> Entity {
+  Entity(bevy.to_bits())
 }
 
 type Rgba = (u8, u8, u8, u8);
@@ -37,7 +43,7 @@ pub struct PointLight {
 }
 
 thread_local! {
-  static CURRENT_WORLD: RefCell<World> = Default::default();
+  static CURRENT_WORLD: RefCell<World> = def();
   static EMPTY_WORLD: RefCell<Option<World>> = RefCell::new(Some(World::new()));
 }
 
@@ -77,7 +83,7 @@ pub fn spawn_color_mesh(transform: Transform, shape: Shape, color: Rgba) -> Enti
     });
     let material = MeshMaterial3d(material);
 
-    world.spawn((transform, mesh, material)).id().into()
+    bevy_to_entity(world.spawn((transform, mesh, material)).id())
   })
 }
 
@@ -99,7 +105,7 @@ pub fn spawn_image_mesh(transform: Transform, shape: Shape, image: Image) -> Ent
     });
     let material = MeshMaterial3d(material);
 
-    world.spawn((transform, mesh, material)).id().into()
+    bevy_to_entity(world.spawn((transform, mesh, material)).id())
   })
 }
 
@@ -117,16 +123,16 @@ pub fn spawn_point_light(transform: Transform, light: PointLight) -> Entity {
           ..def()
         },
       ))
-      .id()
-      .into();
-    entity
+      .id();
+
+    bevy_to_entity(entity)
   })
 }
 
 pub fn spawn_camera(transform: Transform) -> Entity {
   use_world(|world| {
-    let entity = world.spawn((Camera3d::default(), transform)).id().into();
-    entity
+    let entity = world.spawn((Camera3d::default(), transform)).id();
+    bevy_to_entity(entity)
   })
 }
 
@@ -138,12 +144,15 @@ pub fn key_pressed(key_code: KeyCode) -> bool {
 }
 
 pub fn spawn_empty() -> Entity {
-  use_world(|world| world.spawn_empty().id().into())
+  use_world(|world| {
+    let entity = world.spawn_empty().id();
+    bevy_to_entity(entity)
+  })
 }
 
 pub fn despawn(entity: Entity) {
   use_world(|world| {
-    world.despawn(entity.into());
+    world.despawn(entity_to_bevy(entity));
   })
 }
 
@@ -152,7 +161,7 @@ pub fn mut_entity_transform<R>(
   mutate: impl FnOnce(&mut Transform) -> R,
 ) -> Option<R> {
   use_world(|world| {
-    let transform = world.get_mut::<Transform>(entity.into());
+    let transform = world.get_mut::<Transform>(entity_to_bevy(entity));
     if let Some(mut transform) = transform {
       return Some(mutate(&mut transform));
     }
@@ -169,9 +178,10 @@ pub fn load_asset(path: &str) -> AudioAsset {
 
 pub fn play_audio(asset: AudioAsset) -> Entity {
   use_world(|world| {
-    world
+    let entity = world
       .spawn((AudioPlayer(asset.0), PlaybackSettings::DESPAWN))
-      .id()
-      .into()
+      .id();
+
+    bevy_to_entity(entity)
   })
 }

@@ -152,7 +152,7 @@ dependencies = [
  "ndk-context",
  "ndk-sys 0.6.0+11769913",
  "num_enum",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1519,7 +1519,7 @@ dependencies = [
  "polling",
  "rustix",
  "slab",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1993,7 +1993,7 @@ dependencies = [
  "const_panic",
  "encase_derive",
  "glam",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -2135,6 +2135,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
 
 [[package]]
+name = "fk"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "fk_core",
+]
+
+[[package]]
+name = "fk_core"
+version = "0.1.0"
+
+[[package]]
 name = "flate2"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2256,6 +2268,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54614a3312934d066701a80f20f15fa3b56d67ac7722b39eea5b4c9dd1d66c94"
 dependencies = [
  "thread_local",
+]
+
+[[package]]
+name = "game"
+version = "0.1.0"
+dependencies = [
+ "bevy_input",
+ "bevy_math",
+ "bevy_transform",
+ "fk_core",
+ "rand 0.9.0",
+ "relib_interface",
+ "relib_module",
+ "shared",
+]
+
+[[package]]
+name = "game_loader"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy-inspector-egui",
+ "fk",
+ "fk_core",
+ "libloading",
+ "relib_host",
+ "relib_interface",
+ "shared",
 ]
 
 [[package]]
@@ -2439,7 +2479,7 @@ checksum = "c151a2a5ef800297b4e79efa4f4bec035c5f51d5ae587287c9b952bdf734cacd"
 dependencies = [
  "log",
  "presser",
- "thiserror",
+ "thiserror 1.0.69",
  "windows 0.58.0",
 ]
 
@@ -2622,7 +2662,7 @@ dependencies = [
  "combine",
  "jni-sys",
  "log",
- "thiserror",
+ "thiserror 1.0.69",
  "walkdir",
  "windows-sys 0.45.0",
 ]
@@ -2830,6 +2870,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "minhook"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2f2f08fd0c84a0779eda4d47ec1457fdc4ad470bf62605f9c4b16f8cd87b093"
+dependencies = [
+ "cc",
+ "tracing",
+]
+
+[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2863,7 +2913,7 @@ dependencies = [
  "rustc-hash",
  "spirv",
  "termcolor",
- "thiserror",
+ "thiserror 1.0.69",
  "unicode-xid",
 ]
 
@@ -2882,7 +2932,7 @@ dependencies = [
  "regex",
  "regex-syntax 0.8.5",
  "rustc-hash",
- "thiserror",
+ "thiserror 1.0.69",
  "tracing",
  "unicode-ident",
 ]
@@ -2898,7 +2948,7 @@ dependencies = [
  "log",
  "ndk-sys 0.5.0+25.2.9519653",
  "num_enum",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -2913,7 +2963,7 @@ dependencies = [
  "ndk-sys 0.6.0+11769913",
  "num_enum",
  "raw-window-handle",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -3712,6 +3762,83 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 
 [[package]]
+name = "relib_export"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c080a173d3a8b83ae4a2d9b4251fc7774b422194e745bb1584473c9d5779b3b"
+dependencies = [
+ "relib_exportify",
+]
+
+[[package]]
+name = "relib_exportify"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34b3e82dce17a7540fee65d5e46324a05db7035b36cac837ef5bbd58795f0e8f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "relib_internal_shared",
+ "syn",
+]
+
+[[package]]
+name = "relib_host"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb2bfae727e335178781efda3de814a8e37e4205bec329babb412800daba0bdd"
+dependencies = [
+ "libc",
+ "libloading",
+ "minhook",
+ "relib_interface",
+ "relib_internal_crate_compilation_info",
+ "relib_internal_shared",
+ "thiserror 2.0.12",
+ "thread-id",
+ "windows-targets 0.53.0",
+]
+
+[[package]]
+name = "relib_interface"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ed14e387cfba0560457fe0d77aa4f39b2c555a77a5d670ae41b780c458a5bc9"
+dependencies = [
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "relib_internal_shared",
+ "syn",
+]
+
+[[package]]
+name = "relib_internal_crate_compilation_info"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "895bd531f5c24091c4cb4043b4fb1274b8ac03f36ef4fb4a7d506d2661e52eae"
+
+[[package]]
+name = "relib_internal_shared"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e5d8178cca8769a74ad6c6b9e1b51422d4584783294eeb3967a13cb2723abec"
+
+[[package]]
+name = "relib_module"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50535817f890ce531ea0014ee72e423a7cf25bf21e19e090afdf3fc43b1a2f42"
+dependencies = [
+ "libc",
+ "relib_export",
+ "relib_interface",
+ "relib_internal_crate_compilation_info",
+ "relib_internal_shared",
+ "thread-id",
+]
+
+[[package]]
 name = "renderdoc-sys"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3726,7 +3853,7 @@ dependencies = [
  "cpal",
  "hound",
  "lewton",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -3892,6 +4019,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "shared"
+version = "0.1.0"
+
+[[package]]
 name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3951,7 +4082,7 @@ dependencies = [
  "log",
  "memmap2",
  "rustix",
- "thiserror",
+ "thiserror 1.0.69",
  "wayland-backend",
  "wayland-client",
  "wayland-csd-frame",
@@ -3969,15 +4100,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd538fb6910ac1099850255cf94a94df6551fbdd602454387d0adb2d1ca6dead"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "snakeop"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "bevy-inspector-egui",
- "rand 0.9.0",
 ]
 
 [[package]]
@@ -4085,7 +4207,16 @@ version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
 dependencies = [
- "thiserror-impl",
+ "thiserror-impl 1.0.69",
+]
+
+[[package]]
+name = "thiserror"
+version = "2.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "567b8a2dae586314f7be2a752ec7474332959c6460e02bde30d702a66d488708"
+dependencies = [
+ "thiserror-impl 2.0.12",
 ]
 
 [[package]]
@@ -4097,6 +4228,27 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "2.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f7cf42b4507d8ea322120659672cf1b9dbb93f8f2d4ecfd6e51350ff5b17a1d"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "thread-id"
+version = "5.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99043e46c5a15af379c06add30d9c93a6c0e8849de00d244c4a2c417da128d80"
+dependencies = [
+ "libc",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4192,6 +4344,7 @@ version = "0.1.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "784e0ac535deb450455cbfa28a6f0df145ea1bb7ae51b821cf5e7927fdcfbdd0"
 dependencies = [
+ "log",
  "pin-project-lite",
  "tracing-attributes",
  "tracing-core",
@@ -4671,7 +4824,7 @@ dependencies = [
  "raw-window-handle",
  "rustc-hash",
  "smallvec",
- "thiserror",
+ "thiserror 1.0.69",
  "wgpu-hal",
  "wgpu-types",
 ]
@@ -4713,7 +4866,7 @@ dependencies = [
  "renderdoc-sys",
  "rustc-hash",
  "smallvec",
- "thiserror",
+ "thiserror 1.0.69",
  "wasm-bindgen",
  "web-sys",
  "wgpu-types",
