@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use bevy::{
   prelude::*,
   render::{
@@ -9,13 +11,118 @@ use bevy::{
 };
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use fk_core::def;
+use imports_impl::{init_imports, ModuleExports};
+use relib_host::{load_module, Module};
 
 mod imports_impl;
 
-// how many cells from the bottom to the top and from the left to the right
-const CELLS: u32 = 20;
-
 fn main() {
+  start_game();
+}
+
+// // how many cells from the bottom to the top and from the left to the right
+// const CELLS: u32 = 20;
+// // TODO: should it also be rewritten?
+// pub fn grid_texture() -> Image {
+//   const WIDTH: usize = CELLS as usize
+//     // left and right borders
+//     + 2
+//     // // borders between cells
+//     // + (CELLS - 1)
+//     ;
+
+//   const TEXTURE_SIZE: usize =
+//     // width
+//     WIDTH
+//       // height
+//       * WIDTH
+//       // rgba
+//       * 4;
+
+//   let mut texture_data = [0; TEXTURE_SIZE];
+
+//   const WHITE_CELL: [u8; 4] = [255, 255, 255, 255];
+
+//   let wall: Vec<u8> = WHITE_CELL.repeat(WIDTH);
+
+//   let cells_start = WIDTH * 4;
+//   let cells_end = TEXTURE_SIZE - (WIDTH * 4);
+
+//   // top wall
+//   texture_data[0..cells_start].copy_from_slice(&wall);
+//   // bottom wall
+//   texture_data[cells_end..].copy_from_slice(&wall);
+
+//   // left and right walls
+//   for idx in (cells_start..(cells_end + 4)).step_by(WIDTH * 4) {
+//     texture_data[idx..(idx + 4)].copy_from_slice(&WHITE_CELL);
+//     texture_data[(idx - 4)..((idx - 4) + 4)].copy_from_slice(&WHITE_CELL);
+
+//     // --------------- inner walls ---------------
+//     //  (enable borders between cells in WIDTH if its needed)
+//     // let should_be_a_wall = (idx / (WIDTH * 4)) % 2 == 0;
+
+//     // for rel_idx in (0..WIDTH * 4).step_by(4) {
+//     //     if should_be_a_wall || (rel_idx / 4) % 2 == 0 {
+//     //         texture_data[(idx + rel_idx)..(idx + rel_idx) + 4].copy_from_slice(&WHITE_CELL);
+//     //     }
+//     // }
+//   }
+
+//   Image::new_fill(
+//     Extent3d {
+//       width: WIDTH as u32,
+//       height: WIDTH as u32,
+//       depth_or_array_layers: 1,
+//     },
+//     TextureDimension::D2,
+//     &texture_data,
+//     TextureFormat::Rgba8UnormSrgb,
+//     RenderAssetUsages::RENDER_WORLD,
+//   )
+// }
+
+fn reload_on_window_close(
+  mut close_events: EventReader<WindowCloseRequested>,
+  mut exit: EventWriter<AppExit>,
+) {
+  for event in close_events.read() {
+    exit.send(AppExit::Success);
+    unload_game();
+    start_game();
+  }
+}
+
+type Game = Module<ModuleExports>;
+
+thread_local! {
+  static GAME_INSTANCE: RefCell<Option<Game>> = def();
+}
+
+fn load_game() {
+  GAME_INSTANCE.with_borrow_mut(|instance| {
+    let module = unsafe { load_module("target/debug/game.dll", init_imports) };
+    let module: Game = module.unwrap();
+    instance.replace(module);
+  });
+}
+
+fn unload_game() {
+  GAME_INSTANCE.with_borrow_mut(|instance| {
+    let game = instance.take().unwrap();
+    game.unload().unwrap();
+  });
+}
+
+fn call_game_export(call_: impl FnOnce(&ModuleExports)) {
+  GAME_INSTANCE.with_borrow(|game| {
+    call_(game.as_ref().unwrap().exports());
+  });
+}
+
+fn start_game() {
+  load_game();
+
   App::new()
     .add_plugins((
       DefaultPlugins
@@ -28,85 +135,22 @@ fn main() {
     ))
     .add_systems(Startup, |world: &mut World| {
       let return_world = fk::take_world(world);
-      // game::setup();
+
+      call_game_export(|game| unsafe {
+        game.setup().unwrap();
+      });
+
       return_world(world);
     })
     .add_systems(Update, |world: &mut World| {
       let return_world = fk::take_world(world);
-      // game::update();
+
+      call_game_export(|game| unsafe {
+        game.update().unwrap();
+      });
+
       return_world(world);
     })
     .add_systems(Update, reload_on_window_close)
     .run();
-}
-
-// TODO: should it also be rewritten?
-pub fn grid_texture() -> Image {
-  const WIDTH: usize = CELLS as usize
-    // left and right borders
-    + 2
-    // // borders between cells 
-    // + (CELLS - 1)
-    ;
-
-  const TEXTURE_SIZE: usize =
-    // width
-    WIDTH
-      // height
-      * WIDTH
-      // rgba
-      * 4;
-
-  let mut texture_data = [0; TEXTURE_SIZE];
-
-  const WHITE_CELL: [u8; 4] = [255, 255, 255, 255];
-
-  let wall: Vec<u8> = WHITE_CELL.repeat(WIDTH);
-
-  let cells_start = WIDTH * 4;
-  let cells_end = TEXTURE_SIZE - (WIDTH * 4);
-
-  // top wall
-  texture_data[0..cells_start].copy_from_slice(&wall);
-  // bottom wall
-  texture_data[cells_end..].copy_from_slice(&wall);
-
-  // left and right walls
-  for idx in (cells_start..(cells_end + 4)).step_by(WIDTH * 4) {
-    texture_data[idx..(idx + 4)].copy_from_slice(&WHITE_CELL);
-    texture_data[(idx - 4)..((idx - 4) + 4)].copy_from_slice(&WHITE_CELL);
-
-    // --------------- inner walls ---------------
-    //  (enable borders between cells in WIDTH if its needed)
-    // let should_be_a_wall = (idx / (WIDTH * 4)) % 2 == 0;
-
-    // for rel_idx in (0..WIDTH * 4).step_by(4) {
-    //     if should_be_a_wall || (rel_idx / 4) % 2 == 0 {
-    //         texture_data[(idx + rel_idx)..(idx + rel_idx) + 4].copy_from_slice(&WHITE_CELL);
-    //     }
-    // }
-  }
-
-  Image::new_fill(
-    Extent3d {
-      width: WIDTH as u32,
-      height: WIDTH as u32,
-      depth_or_array_layers: 1,
-    },
-    TextureDimension::D2,
-    &texture_data,
-    TextureFormat::Rgba8UnormSrgb,
-    RenderAssetUsages::RENDER_WORLD,
-  )
-}
-
-fn reload_on_window_close(
-  mut close_events: EventReader<WindowCloseRequested>,
-  mut exit: EventWriter<AppExit>,
-) {
-  for event in close_events.read() {
-    // TEST
-    println!("Window close requested: {:?}", event);
-    // exit.send(AppExit::Success);
-  }
 }

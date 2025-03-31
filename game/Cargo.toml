@@ -3,8 +3,9 @@ name = "game"
 version = "0.1.0"
 edition = "2024"
 
-[features]
-unloading = ["relib_module/unloading"]
+# TODO:
+# [features]
+# unloading = ["relib_module/unloading"]
 
 [dependencies]
 bevy_math = { version = "0.15.3", default-features = false }
@@ -12,7 +13,7 @@ bevy_transform = { version = "0.15.3", default-features = false }
 bevy_input = { version = "0.15.3", default-features = false }
 rand = "0.9.0"
 relib_interface = { version = "0.4.2", features = ["include"] }
-relib_module = "0.4.2"
+relib_module = { version = "0.4.2", features = ["unloading"] }
 shared.path = "../shared"
 fk_core.path = "../fk_core"
 

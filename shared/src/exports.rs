@@ -1,1 +1,4 @@
-pub trait Exports {}
+pub trait Exports {
+  fn setup();
+  fn update();
+}

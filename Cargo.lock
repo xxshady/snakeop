@@ -2145,6 +2145,10 @@ dependencies = [
 [[package]]
 name = "fk_core"
 version = "0.1.0"
+dependencies = [
+ "bevy_input",
+ "bevy_math",
+]
 
 [[package]]
 name = "flate2"
@@ -4021,6 +4025,9 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
+dependencies = [
+ "fk_core",
+]
 
 [[package]]
 name = "shlex"

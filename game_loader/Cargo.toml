@@ -4,15 +4,16 @@ version = "0.1.0"
 edition = "2024"
 
 
-[features]
-unloading = ["relib_host/unloading"]
+# TODO:
+# [features]
+# unloading = ["relib_host/unloading"]
 
 [dependencies]
 fk.path = "../fk"
 fk_core.path = "../fk_core"
 bevy-inspector-egui = "0.29.1"
 bevy.workspace = true
-relib_host = "0.4.2"
+relib_host = { version = "0.4.2", features = ["unloading"] }
 libloading = "0.8.6"
 relib_interface = { version = "0.4.2", features = ["include"] }
 shared.path = "../shared"

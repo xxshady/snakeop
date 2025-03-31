@@ -1,15 +1,18 @@
-use std::{cell::RefCell, mem};
+use std::{cell::RefCell, collections::HashMap, mem, sync::Arc};
 
 use fk_core::*;
 
 use bevy::{
-  asset::{DirectAssetAccessExt, Handle},
+  asset::{AssetId, DirectAssetAccessExt, Handle, StrongHandle},
   audio::{AudioPlayer, AudioSource, PlaybackSettings},
   color::Srgba,
   core_pipeline::core_3d::Camera3d,
   ecs::{entity::Entity as BevyEntity, world::World},
   image::Image,
-  input::{keyboard::KeyCode, ButtonInput},
+  input::{
+    keyboard::{KeyCode, NativeKeyCode},
+    ButtonInput,
+  },
   math::{
     primitives::{Cuboid, Plane3d},
     Vec3,
@@ -27,24 +30,10 @@ pub fn bevy_to_entity(bevy: BevyEntity) -> Entity {
   Entity(bevy.to_bits())
 }
 
-type Rgba = (u8, u8, u8, u8);
-
-pub enum Shape {
-  Cuboid(Vec3),
-  Plane(f32, f32),
-}
-
-pub struct PointLight {
-  pub intensity: f32,
-  pub range: f32,
-  pub shadows_enabled: bool,
-  pub shadow_depth_bias: f32,
-  pub color: Rgba,
-}
-
 thread_local! {
   static CURRENT_WORLD: RefCell<World> = def();
   static EMPTY_WORLD: RefCell<Option<World>> = RefCell::new(Some(World::new()));
+  static ASSET_HANDLES: RefCell<HashMap<BevyRawAssetIndex, Arc<StrongHandle>>> = def();
 }
 
 pub fn take_world(world: &mut World) -> impl FnOnce(&mut World) + use<> {
@@ -136,7 +125,18 @@ pub fn spawn_camera(transform: Transform) -> Entity {
   })
 }
 
-pub fn key_pressed(key_code: KeyCode) -> bool {
+pub fn key_pressed(key_code: u32) -> bool {
+  assert_ne!(
+    key_code,
+    key_code_enum_discriminant(&KeyCode::Unidentified(NativeKeyCode::Unidentified))
+  );
+  // max key code (variant_count is unstable)
+  assert!(key_code <= key_code_enum_discriminant(&KeyCode::F35));
+
+  // SAFETY: KeyCode enum is marked as repr(u32) so first u32 is always discriminant
+  // (checked in miri and it doesnt complain)
+  let key_code = unsafe { std::mem::transmute::<[u32; 3], KeyCode>([key_code, 0, 0]) };
+
   use_world(|world| {
     let input = world.resource::<ButtonInput<KeyCode>>();
     input.pressed(key_code)
@@ -169,19 +169,50 @@ pub fn mut_entity_transform<R>(
   })
 }
 
-#[derive(Clone)]
-pub struct AudioAsset(Handle<AudioSource>);
+pub fn load_audio_asset(path: &str) -> AudioAsset {
+  use_world(|world| {
+    let handle: Handle<AudioSource> = world.load_asset(path);
 
-pub fn load_asset(path: &str) -> AudioAsset {
-  use_world(|world| AudioAsset(world.load_asset(path)))
+    let AssetId::Index {
+      index: handle_index,
+      marker: _,
+    } = handle.id()
+    else {
+      unreachable!();
+    };
+    let handle_index = handle_index.to_bits();
+
+    ASSET_HANDLES.with_borrow_mut({
+      // let handle = handle.clone();
+      let Handle::Strong(handle) = handle else {
+        unreachable!();
+      };
+      |handles| {
+        handles.insert(handle_index, handle);
+      }
+    });
+
+    AudioAsset(handle_index)
+  })
 }
 
 pub fn play_audio(asset: AudioAsset) -> Entity {
   use_world(|world| {
+    let handle = ASSET_HANDLES.with_borrow(|handles| handles.get(&asset.0).cloned().unwrap());
+
     let entity = world
-      .spawn((AudioPlayer(asset.0), PlaybackSettings::DESPAWN))
+      .spawn((
+        AudioPlayer(Handle::<AudioSource>::Strong(handle)),
+        PlaybackSettings::DESPAWN,
+      ))
       .id();
 
     bevy_to_entity(entity)
   })
+}
+
+pub fn drop_asset(index: BevyRawAssetIndex) {
+  ASSET_HANDLES.with_borrow_mut(|handles| {
+    handles.remove(&index).unwrap();
+  });
 }
