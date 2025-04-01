@@ -2,7 +2,7 @@
 resolver = "3"
 package.edition = "2024"
 
-members = ["fk", "fk_core", "game", "game_loader", "shared"]
+members = ["shared", "fk", "game_loader", "fk_core", "game"]
 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]

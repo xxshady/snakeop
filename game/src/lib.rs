@@ -10,10 +10,11 @@ use bevy_math::prelude::*;
 use fk_core::{AudioAsset, Entity, PointLight, Shape};
 use rand::Rng;
 use fk::{
-  def, despawn, key_pressed, load_asset, mut_entity_transform, play_audio, spawn_camera,
-  spawn_color_mesh, spawn_empty, spawn_image_mesh, spawn_point_light, ModuleExportsImpl,
+  def, despawn, key_pressed, load_audio_asset, mut_entity_transform, play_audio, spawn_camera,
+  spawn_color_mesh, spawn_empty, spawn_point_light, ModuleExportsImpl,
 };
 use shared::exports::Exports;
+use relib_module as _;
 
 impl Exports for ModuleExportsImpl {
   fn setup() {
@@ -45,11 +46,18 @@ fn setup() {
   let size = (CELLS + 2) as f32;
   let offset = size / 2.0;
 
+  // TODO:
   // the grid
-  spawn_image_mesh(
+  // spawn_image_mesh(
+  //   Transform::from_xyz(-offset, 0.0, offset),
+  //   Shape::Plane(size, size),
+  //   grid_texture(),
+  // );
+
+  spawn_color_mesh(
     Transform::from_xyz(-offset, 0.0, offset),
-    Shape::Plane(size, size),
-    grid_texture(),
+    &Shape::Plane(size, size),
+    (255, 255, 255, 50),
   );
 
   spawn_camera(
@@ -59,7 +67,7 @@ fn setup() {
 
   spawn_point_light(
     Transform::from_xyz(8.0, 16.0, 8.0),
-    PointLight {
+    &PointLight {
       shadows_enabled: true,
       intensity: 10_000_000.,
       range: 100.0,
@@ -71,7 +79,7 @@ fn setup() {
   let (mut snakes, mut occupied_cells, mut food) = def();
   spawn_snake(&mut snakes, &mut occupied_cells, 3);
 
-  let food_sound = load_asset("sounds/smb_coin.wav");
+  let food_sound = load_audio_asset("../../assets/sounds/smb_coin.wav");
 
   spawn_food(&mut food, &mut occupied_cells);
 
@@ -131,7 +139,7 @@ fn spawn_snake_part(
 ) {
   let entity = spawn_color_mesh(
     place_at(pos),
-    Shape::Cuboid(Vec3::splat(1.)),
+    &Shape::Cuboid(Vec3::splat(1.)),
     (0, 255, 0, 255),
   );
   snake.parts.push(SnakePart {
@@ -234,7 +242,7 @@ fn spawn_food(food: &mut Vec<Food>, occupied: &mut OccupiedCells) {
 
   let entity = spawn_color_mesh(
     place_at(pos).with_scale(Vec3::splat(0.5)),
-    Shape::Cuboid(Vec3::splat(1.)),
+    &Shape::Cuboid(Vec3::splat(1.)),
     (255, 0, 0, 255),
   );
 
@@ -246,7 +254,7 @@ fn spawn_food(food: &mut Vec<Food>, occupied: &mut OccupiedCells) {
       transform.translation.z += 0.15;
       transform
     },
-    PointLight {
+    &PointLight {
       intensity: 220_000.,
       range: 5.,
       color: (255, 0, 0, 255),
@@ -290,6 +298,7 @@ enum Direction {
   Right,
 }
 
+#[derive(Debug)]
 struct Food {
   entity: Entity,
   pos: Pos,
@@ -298,7 +307,7 @@ struct Food {
 
 // position is stored in signed integers to avoid
 // overflows in movement processing
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Pos {
   x: i32,
   y: i32,
@@ -460,14 +469,16 @@ fn process_snake_food(state: &mut State) {
     let head_pos = head.pos;
 
     let mut despawn_food = None;
-    for food in &mut state.food {
+    for (idx, food) in &mut state.food.iter_mut().enumerate() {
       if food.pos != head_pos {
         continue;
       }
-      despawn_food = Some(food);
+      despawn_food = Some(idx);
+      break;
     }
 
-    if let Some(food) = despawn_food {
+    if let Some(idx) = despawn_food {
+      let food = state.food.swap_remove(idx);
       despawn(food.entity);
       despawn(food.light);
       deoccupy_cell(&mut state.occupied_cells, food.pos);

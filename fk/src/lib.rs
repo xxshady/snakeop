@@ -1,4 +1,9 @@
-use std::{cell::RefCell, collections::HashMap, mem, sync::Arc};
+use std::{
+  cell::RefCell,
+  collections::{HashMap, HashSet},
+  mem,
+  sync::Arc,
+};
 
 use fk_core::*;
 
@@ -34,6 +39,7 @@ thread_local! {
   static CURRENT_WORLD: RefCell<World> = def();
   static EMPTY_WORLD: RefCell<Option<World>> = RefCell::new(Some(World::new()));
   static ASSET_HANDLES: RefCell<HashMap<BevyRawAssetIndex, Arc<StrongHandle>>> = def();
+  static ENTITIES: RefCell<HashSet<BevyEntity>> = def();
 }
 
 pub fn take_world(world: &mut World) -> impl FnOnce(&mut World) + use<> {
@@ -58,11 +64,11 @@ fn use_world<R>(use_: impl FnOnce(&mut World) -> R) -> R {
 }
 
 // TODO: cache assets
-pub fn spawn_color_mesh(transform: Transform, shape: Shape, color: Rgba) -> Entity {
+pub fn spawn_color_mesh(transform: Transform, shape: &Shape, color: Rgba) -> Entity {
   use_world(|world| {
     let mesh: Mesh = match shape {
-      Shape::Cuboid(size) => Cuboid::from_size(size).into(),
-      Shape::Plane(width, height) => Plane3d::default().mesh().size(width, height).into(),
+      Shape::Cuboid(size) => Cuboid::from_size(*size).into(),
+      Shape::Plane(width, height) => Plane3d::default().mesh().size(*width, *height).into(),
     };
     let mesh: Handle<Mesh> = world.add_asset(mesh);
     let mesh = Mesh3d(mesh);
@@ -72,7 +78,11 @@ pub fn spawn_color_mesh(transform: Transform, shape: Shape, color: Rgba) -> Enti
     });
     let material = MeshMaterial3d(material);
 
-    bevy_to_entity(world.spawn((transform, mesh, material)).id())
+    let entity = world.spawn((transform, mesh, material)).id();
+    ENTITIES.with_borrow_mut(|entities| entities.insert(entity));
+
+    let entity = bevy_to_entity(entity);
+    entity
   })
 }
 
@@ -94,11 +104,16 @@ pub fn spawn_image_mesh(transform: Transform, shape: Shape, image: Image) -> Ent
     });
     let material = MeshMaterial3d(material);
 
-    bevy_to_entity(world.spawn((transform, mesh, material)).id())
+    let entity = world.spawn((transform, mesh, material)).id();
+
+    ENTITIES.with_borrow_mut(|entities| entities.insert(entity));
+
+    let entity = bevy_to_entity(entity);
+    entity
   })
 }
 
-pub fn spawn_point_light(transform: Transform, light: PointLight) -> Entity {
+pub fn spawn_point_light(transform: Transform, light: &PointLight) -> Entity {
   use_world(|world| {
     let entity = world
       .spawn((
@@ -114,14 +129,19 @@ pub fn spawn_point_light(transform: Transform, light: PointLight) -> Entity {
       ))
       .id();
 
-    bevy_to_entity(entity)
+    ENTITIES.with_borrow_mut(|entities| entities.insert(entity));
+
+    let entity = bevy_to_entity(entity);
+    entity
   })
 }
 
 pub fn spawn_camera(transform: Transform) -> Entity {
   use_world(|world| {
     let entity = world.spawn((Camera3d::default(), transform)).id();
-    bevy_to_entity(entity)
+    ENTITIES.with_borrow_mut(|entities| entities.insert(entity));
+    let entity = bevy_to_entity(entity);
+    entity
   })
 }
 
@@ -146,7 +166,9 @@ pub fn key_pressed(key_code: u32) -> bool {
 pub fn spawn_empty() -> Entity {
   use_world(|world| {
     let entity = world.spawn_empty().id();
-    bevy_to_entity(entity)
+    ENTITIES.with_borrow_mut(|entities| entities.insert(entity));
+    let entity = bevy_to_entity(entity);
+    entity
   })
 }
 
@@ -156,16 +178,22 @@ pub fn despawn(entity: Entity) {
   })
 }
 
-pub fn mut_entity_transform<R>(
-  entity: Entity,
-  mutate: impl FnOnce(&mut Transform) -> R,
-) -> Option<R> {
+pub fn begin_mut_entity_transform(entity: Entity) -> StableTransform {
   use_world(|world| {
-    let transform = world.get_mut::<Transform>(entity_to_bevy(entity));
-    if let Some(mut transform) = transform {
-      return Some(mutate(&mut transform));
-    }
-    None
+    world
+      .get::<Transform>(entity_to_bevy(entity))
+      .cloned()
+      .unwrap()
+      .into()
+  })
+}
+
+pub fn finish_mut_entity_transform(entity: Entity, mutated: &StableTransform) {
+  use_world(|world| {
+    let mut transform = world.get_mut::<Transform>(entity_to_bevy(entity)).unwrap();
+    transform.translation = mutated.translation;
+    transform.rotation = mutated.rotation;
+    transform.scale = mutated.scale;
   })
 }
 
@@ -214,5 +242,16 @@ pub fn play_audio(asset: AudioAsset) -> Entity {
 pub fn drop_asset(index: BevyRawAssetIndex) {
   ASSET_HANDLES.with_borrow_mut(|handles| {
     handles.remove(&index).unwrap();
+  });
+}
+
+pub fn clear_world(world: &mut World) {
+  ASSET_HANDLES.with_borrow_mut(|handles| {
+    handles.clear();
+  });
+  ENTITIES.with_borrow_mut(|entities| {
+    for entity in entities.iter() {
+      world.despawn(*entity);
+    }
   });
 }

@@ -1,4 +1,9 @@
-use std::cell::RefCell;
+mod imports_impl;
+
+use std::{
+  cell::{Cell, RefCell},
+  marker::PhantomData,
+};
 
 use bevy::{
   prelude::*,
@@ -6,6 +11,7 @@ use bevy::{
     render_asset::RenderAssetUsages,
     render_resource::{Extent3d, TextureDimension, TextureFormat},
   },
+  tasks::{TaskPool, TaskPoolBuilder},
   window::{ClosingWindow, WindowCloseRequested},
   winit::WinitPlugin,
 };
@@ -14,10 +20,49 @@ use fk_core::def;
 use imports_impl::{init_imports, ModuleExports};
 use relib_host::{load_module, Module};
 
-mod imports_impl;
-
 fn main() {
-  start_game();
+  load_game();
+
+  let game_update = |world: &mut World| {
+    let setup_called = GAME_INSTANCE.with_borrow_mut(|(_, setup_called)| {
+      let called = *setup_called;
+      if !called {
+        *setup_called = true;
+      }
+      called
+    });
+
+    if !setup_called {
+      dbg!();
+      fk::clear_world(world);
+
+      let return_world = fk::take_world(world);
+      call_game_export(|game| unsafe {
+        game.setup().unwrap();
+      });
+      return_world(world);
+    }
+
+    let return_world = fk::take_world(world);
+    call_game_export(|game| unsafe {
+      game.update().unwrap();
+    });
+    return_world(world);
+  };
+
+  App::new()
+    .insert_non_send_resource(SingleThreaded(PhantomData))
+    .add_plugins((
+      DefaultPlugins
+        .set(ImagePlugin::default_nearest())
+        .set(WindowPlugin {
+          close_when_requested: false,
+          ..def()
+        }),
+      WorldInspectorPlugin::default(),
+    ))
+    .add_systems(Update, (game_update, reload_on_window_close).chain())
+    .run();
 }
 
 // // how many cells from the bottom to the top and from the left to the right
@@ -82,25 +127,27 @@ fn main() {
 //   )
 // }
 
+struct SingleThreaded(PhantomData<*const ()>);
+
 fn reload_on_window_close(
+  non_send: NonSend<SingleThreaded>,
   mut close_events: EventReader<WindowCloseRequested>,
   mut exit: EventWriter<AppExit>,
 ) {
-  for event in close_events.read() {
-    exit.send(AppExit::Success);
+  for _ in close_events.read() {
     unload_game();
-    start_game();
+    load_game();
   }
 }
 
 type Game = Module<ModuleExports>;
 
 thread_local! {
-  static GAME_INSTANCE: RefCell<Option<Game>> = def();
+  static GAME_INSTANCE: RefCell<(Option<Game>, bool)> = def();
 }
 
 fn load_game() {
-  GAME_INSTANCE.with_borrow_mut(|instance| {
+  GAME_INSTANCE.with_borrow_mut(|(instance, _)| {
     let module = unsafe { load_module("target/debug/game.dll", init_imports) };
     let module: Game = module.unwrap();
     instance.replace(module);
@@ -108,49 +155,15 @@ fn load_game() {
 }
 
 fn unload_game() {
-  GAME_INSTANCE.with_borrow_mut(|instance| {
+  GAME_INSTANCE.with_borrow_mut(|(instance, setup_called)| {
     let game = instance.take().unwrap();
     game.unload().unwrap();
+    *setup_called = false;
   });
 }
 
 fn call_game_export(call_: impl FnOnce(&ModuleExports)) {
-  GAME_INSTANCE.with_borrow(|game| {
+  GAME_INSTANCE.with_borrow(|(game, _)| {
     call_(game.as_ref().unwrap().exports());
   });
-}
-
-fn start_game() {
-  load_game();
-
-  App::new()
-    .add_plugins((
-      DefaultPlugins
-        .set(ImagePlugin::default_nearest())
-        .set(WindowPlugin {
-          close_when_requested: false,
-          ..def()
-        }),
-      WorldInspectorPlugin::default(),
-    ))
-    .add_systems(Startup, |world: &mut World| {
-      let return_world = fk::take_world(world);
-
-      call_game_export(|game| unsafe {
-        game.setup().unwrap();
-      });
-
-      return_world(world);
-    })
-    .add_systems(Update, |world: &mut World| {
-      let return_world = fk::take_world(world);
-
-      call_game_export(|game| unsafe {
-        game.update().unwrap();
-      });
-
-      return_world(world);
-    })
-    .add_systems(Update, reload_on_window_close)
-    .run();
 }

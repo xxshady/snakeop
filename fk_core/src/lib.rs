@@ -1,12 +1,15 @@
 use bevy_input::keyboard::KeyCode;
-use bevy_math::Vec3;
+use bevy_math::{Quat, Vec3};
+use bevy_transform::components::Transform;
 
 pub fn def<T: Default>() -> T {
   Default::default()
 }
 
-#[derive(Clone, Copy, PartialEq)]
-pub struct Entity(pub u64);
+pub type RawEntity = u64;
+
+#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
+pub struct Entity(pub RawEntity);
 
 /// See <https://docs.rs/bevy_asset/0.15.3/bevy_asset/struct.AssetIndex.html>
 pub type BevyRawAssetIndex = u64;
@@ -37,4 +40,32 @@ pub fn key_code_enum_discriminant(key_code: &KeyCode) -> u32 {
   // between `repr(C)` structs, each of which has the `u32` discriminant as its first
   // field, so we can read the discriminant without offsetting the pointer.
   unsafe { *<*const _>::from(key_code).cast::<u32>() }
+}
+
+#[derive(Clone)]
+#[repr(C)]
+pub struct StableTransform {
+  pub translation: Vec3,
+  pub rotation: Quat,
+  pub scale: Vec3,
+}
+
+impl From<StableTransform> for Transform {
+  fn from(value: StableTransform) -> Self {
+    Self {
+      translation: value.translation,
+      rotation: value.rotation,
+      scale: value.scale,
+    }
+  }
+}
+
+impl From<Transform> for StableTransform {
+  fn from(value: Transform) -> Self {
+    Self {
+      translation: value.translation,
+      rotation: value.rotation,
+      scale: value.scale,
+    }
+  }
 }

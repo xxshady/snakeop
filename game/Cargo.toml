@@ -3,6 +3,9 @@ name = "game"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+crate-type = ["cdylib"]
+
 # TODO:
 # [features]
 # unloading = ["relib_module/unloading"]
@@ -16,6 +19,7 @@ relib_interface = { version = "0.4.2", features = ["include"] }
 relib_module = { version = "0.4.2", features = ["unloading"] }
 shared.path = "../shared"
 fk_core.path = "../fk_core"
+thread-id = "5.0.0"
 
 [build-dependencies]
 relib_interface = { version = "0.4.2", features = ["build"] }
