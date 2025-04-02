@@ -4,10 +4,5 @@ version = "0.1.0"
 edition.workspace = true
 
 [dependencies]
-bevy_math = { version = "0.15.3" }
-bevy_input = { version = "0.15.3" }
-bevy_transform = { version = "0.15.3" }
-
-[build-dependencies]
-# https://github.com/bevyengine/bevy/issues/18668
-bevy_reflect = { version = "0.15.3", features = ["documentation"] }
+bevy_math = { version = "0.15.3", default-features = false }
+bevy_transform = { version = "0.15.3", default-features = false }

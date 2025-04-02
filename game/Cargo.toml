@@ -13,7 +13,6 @@ crate-type = ["cdylib"]
 [dependencies]
 bevy_math = { version = "0.15.3", default-features = false }
 bevy_transform = { version = "0.15.3", default-features = false }
-bevy_input = { version = "0.15.3", default-features = false }
 rand = "0.9.0"
 relib_interface = { version = "0.4.2", features = ["include"] }
 relib_module = { version = "0.4.2", features = ["unloading"] }

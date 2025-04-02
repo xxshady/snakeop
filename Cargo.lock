@@ -2249,9 +2249,7 @@ dependencies = [
 name = "fk_core"
 version = "0.1.0"
 dependencies = [
- "bevy_input",
  "bevy_math",
- "bevy_reflect",
  "bevy_transform",
 ]
 
@@ -2383,7 +2381,6 @@ dependencies = [
 name = "game"
 version = "0.1.0"
 dependencies = [
- "bevy_input",
  "bevy_math",
  "bevy_transform",
  "fk_core",

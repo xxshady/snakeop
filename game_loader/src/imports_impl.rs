@@ -1,5 +1,6 @@
 use fk_core::{
-  AudioAsset, BevyRawAssetIndex, Entity, PointLight, RawEntity, Rgba, Shape, StableTransform,
+  AudioAsset, BevyRawAssetIndex, Entity, KeyCode, PointLight, RawEntity, Rgba, Shape,
+  StableTransform,
 };
 use shared::{abi_stable_types::Str, imports::Imports};
 
@@ -14,7 +15,7 @@ impl Imports for ModuleImportsImpl {
     fk::despawn(Entity(entity))
   }
 
-  fn key_pressed(key_code: u32) -> bool {
+  fn key_pressed(key_code: KeyCode) -> bool {
     fk::key_pressed(key_code)
   }
 

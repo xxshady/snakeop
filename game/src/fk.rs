@@ -1,17 +1,16 @@
-use bevy_input::keyboard::KeyCode;
 use bevy_transform::components::Transform;
 pub use fk_core::*;
 
 relib_interface::include_exports!();
 pub use gen_exports::ModuleExportsImpl;
-relib_interface::include_imports!();
+relib_interface::include_imports!(gen_imports);
 
 pub fn despawn(entity: Entity) {
   unsafe { gen_imports::despawn(entity.0) }
 }
 
 pub fn key_pressed(key: KeyCode) -> bool {
-  unsafe { gen_imports::key_pressed(key_code_enum_discriminant(&key)) }
+  unsafe { gen_imports::key_pressed(key) }
 }
 
 pub fn load_audio_asset(path: &str) -> AudioAsset {

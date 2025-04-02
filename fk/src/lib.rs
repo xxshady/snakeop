@@ -5,7 +5,7 @@ use std::{
   sync::Arc,
 };
 
-use fk_core::*;
+use fk_core::{KeyCode, *};
 
 use bevy::{
   asset::{AssetId, DirectAssetAccessExt, Handle, StrongHandle},
@@ -15,7 +15,7 @@ use bevy::{
   ecs::{entity::Entity as BevyEntity, world::World},
   image::Image,
   input::{
-    keyboard::{KeyCode, NativeKeyCode},
+    keyboard::{KeyCode as BevyKeyCode, NativeKeyCode},
     ButtonInput,
   },
   math::{
@@ -145,20 +145,23 @@ pub fn spawn_camera(transform: Transform) -> Entity {
   })
 }
 
-pub fn key_pressed(key_code: u32) -> bool {
-  assert_ne!(
-    key_code,
-    key_code_enum_discriminant(&KeyCode::Unidentified(NativeKeyCode::Unidentified))
-  );
-  // max key code (variant_count is unstable)
-  assert!(key_code <= key_code_enum_discriminant(&KeyCode::F35));
+pub fn key_pressed(key_code: KeyCode) -> bool {
+  let key_code: BevyKeyCode = {
+    let key_code = key_code as u32;
+    assert_ne!(
+      key_code as u32,
+      bevy_key_code_enum_discriminant(&BevyKeyCode::Unidentified(NativeKeyCode::Unidentified))
+    );
+    // max key code (variant_count is unstable)
+    assert!(key_code as u32 <= bevy_key_code_enum_discriminant(&BevyKeyCode::F35));
 
-  // SAFETY: KeyCode enum is marked as repr(u32) so first u32 is always discriminant
-  // (checked in miri and it doesnt complain)
-  let key_code = unsafe { std::mem::transmute::<[u32; 3], KeyCode>([key_code, 0, 0]) };
+    // SAFETY: KeyCode enum is marked as repr(u32) so first u32 is always discriminant
+    // (checked in miri and it doesnt complain)
+    unsafe { std::mem::transmute::<[u32; 3], BevyKeyCode>([key_code, 0, 0]) }
+  };
 
   use_world(|world| {
-    let input = world.resource::<ButtonInput<KeyCode>>();
+    let input = world.resource::<ButtonInput<BevyKeyCode>>();
     input.pressed(key_code)
   })
 }
@@ -174,7 +177,11 @@ pub fn spawn_empty() -> Entity {
 
 pub fn despawn(entity: Entity) {
   use_world(|world| {
-    world.despawn(entity_to_bevy(entity));
+    let entity = entity_to_bevy(entity);
+    world.despawn(entity);
+    ENTITIES.with_borrow_mut(|entities| {
+      assert!(entities.remove(&entity));
+    });
   })
 }
 
@@ -250,8 +257,16 @@ pub fn clear_world(world: &mut World) {
     handles.clear();
   });
   ENTITIES.with_borrow_mut(|entities| {
-    for entity in entities.iter() {
-      world.despawn(*entity);
+    for entity in entities.drain() {
+      world.despawn(entity);
     }
   });
+}
+
+/// See [`core::mem::discriminant`]
+pub fn bevy_key_code_enum_discriminant(key_code: &BevyKeyCode) -> u32 {
+  // SAFETY: Because `KeyCode` is marked `repr(u32)`, its layout is a `repr(C)` `union`
+  // between `repr(C)` structs, each of which has the `u32` discriminant as its first
+  // field, so we can read the discriminant without offsetting the pointer.
+  unsafe { *<*const _>::from(key_code).cast::<u32>() }
 }

@@ -1,8 +1,10 @@
 mod imports_impl;
+mod live_reload;
 
 use std::{
   cell::{Cell, RefCell},
   marker::PhantomData,
+  sync::mpsc::{channel, Receiver},
 };
 
 use bevy::{
@@ -19,11 +21,43 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use fk_core::def;
 use imports_impl::{init_imports, ModuleExports};
 use relib_host::{load_module, Module};
+use live_reload::LiveReloadMessage;
 
 fn main() {
   load_game();
 
+  let (sender, receiver) = channel();
+  std::thread::spawn(|| {
+    live_reload::run_loop(sender);
+  });
+
+  thread_local! {
+    static LIVE_RELOAD_RECEIVER: RefCell<Option<Receiver<LiveReloadMessage>>> = def();
+  }
+
+  LIVE_RELOAD_RECEIVER.replace(Some(receiver));
+
   let game_update = |world: &mut World| {
+    let msg = LIVE_RELOAD_RECEIVER.with_borrow(|receiver| {
+      receiver.as_ref().unwrap().try_recv()
+    });
+    if let Ok(msg) = msg {
+      match msg {
+        LiveReloadMessage::Success => {
+          unload_game();
+          load_game();
+        }
+        LiveReloadMessage::BuildFailure => {
+          unload_game();
+        }
+      }
+    }
+
+    let game_is_loaded = GAME_INSTANCE.with_borrow(|(instance, _)| { instance.is_some() });
+    if !game_is_loaded {
+      return;
+    }
+
     let setup_called = GAME_INSTANCE.with_borrow_mut(|(_, setup_called)| {
       let called = *setup_called;
       if !called {
@@ -33,7 +67,6 @@ fn main() {
     });
 
     if !setup_called {
-      dbg!();
       fk::clear_world(world);
 
       let return_world = fk::take_world(world);
@@ -53,15 +86,10 @@ fn main() {
   App::new()
     .insert_non_send_resource(SingleThreaded(PhantomData))
     .add_plugins((
-      DefaultPlugins
-        .set(ImagePlugin::default_nearest())
-        .set(WindowPlugin {
-          close_when_requested: false,
-          ..def()
-        }),
+      DefaultPlugins.set(ImagePlugin::default_nearest()),
       WorldInspectorPlugin::default(),
     ))
-    .add_systems(Update, (game_update, reload_on_window_close).chain())
+    .add_systems(Update, game_update)
     .run();
 }
 
@@ -129,17 +157,6 @@ fn main() {
 
 struct SingleThreaded(PhantomData<*const ()>);
 
-fn reload_on_window_close(
-  non_send: NonSend<SingleThreaded>,
-  mut close_events: EventReader<WindowCloseRequested>,
-  mut exit: EventWriter<AppExit>,
-) {
-  for _ in close_events.read() {
-    unload_game();
-    load_game();
-  }
-}
-
 type Game = Module<ModuleExports>;
 
 thread_local! {
@@ -156,7 +173,9 @@ fn load_game() {
 
 fn unload_game() {
   GAME_INSTANCE.with_borrow_mut(|(instance, setup_called)| {
-    let game = instance.take().unwrap();
+    let Some(game) = instance.take() else {
+      return;
+    };
     game.unload().unwrap();
     *setup_called = false;
   });

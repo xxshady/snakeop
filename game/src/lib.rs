@@ -4,10 +4,9 @@ use std::{
   cell::RefCell,
   time::{Duration, Instant},
 };
-use bevy_input::prelude::*;
 use bevy_transform::components::Transform;
 use bevy_math::prelude::*;
-use fk_core::{AudioAsset, Entity, PointLight, Shape};
+use fk_core::{AudioAsset, Entity, KeyCode, PointLight, Rgba, Shape};
 use rand::Rng;
 use fk::{
   def, despawn, key_pressed, load_audio_asset, mut_entity_transform, play_audio, spawn_camera,
@@ -53,11 +52,11 @@ fn setup() {
   //   Shape::Plane(size, size),
   //   grid_texture(),
   // );
-
   spawn_color_mesh(
     Transform::from_xyz(-offset, 0.0, offset),
     &Shape::Plane(size, size),
-    (255, 255, 255, 50),
+    // Rgba(80, 80, 80, 255),
+    Rgba(80, 80, 110, 255),
   );
 
   spawn_camera(
@@ -72,7 +71,7 @@ fn setup() {
       intensity: 10_000_000.,
       range: 100.0,
       shadow_depth_bias: 0.2,
-      color: (255, 255, 255, 255),
+      color: Rgba(255, 255, 255, 255),
     },
   );
 
@@ -106,7 +105,7 @@ fn update() {
     state.since_last_update = since_last_update;
 
     state.since_last_fixed_update += since_last_update;
-    if state.since_last_fixed_update < Duration::from_millis(300) {
+    if state.since_last_fixed_update < Duration::from_millis(200) {
       return;
     }
 
@@ -140,7 +139,7 @@ fn spawn_snake_part(
   let entity = spawn_color_mesh(
     place_at(pos),
     &Shape::Cuboid(Vec3::splat(1.)),
-    (0, 255, 0, 255),
+    Rgba(0, 255, 0, 255),
   );
   snake.parts.push(SnakePart {
     entity,
@@ -243,7 +242,7 @@ fn spawn_food(food: &mut Vec<Food>, occupied: &mut OccupiedCells) {
   let entity = spawn_color_mesh(
     place_at(pos).with_scale(Vec3::splat(0.5)),
     &Shape::Cuboid(Vec3::splat(1.)),
-    (255, 0, 0, 255),
+    Rgba(255, 0, 0, 255),
   );
 
   let light = spawn_point_light(
@@ -257,7 +256,7 @@ fn spawn_food(food: &mut Vec<Food>, occupied: &mut OccupiedCells) {
     &PointLight {
       intensity: 220_000.,
       range: 5.,
-      color: (255, 0, 0, 255),
+      color: Rgba(255, 0, 0, 255),
       shadows_enabled: false,
       shadow_depth_bias: 0.,
     },
