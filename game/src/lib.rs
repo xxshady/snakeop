@@ -6,9 +6,10 @@ use std::{
 };
 use bevy_transform::components::Transform;
 use bevy_math::prelude::*;
-use fk_core::{AudioAsset, Entity, KeyCode, PointLight, Rgba, Shape};
+use fk_core::{Entity, KeyCode, PointLight, Rgba, Shape};
 use rand::Rng;
 use fk::{
+  AssetHandle,
   def, despawn, key_pressed, load_audio_asset, mut_entity_transform, play_audio, spawn_camera,
   spawn_color_mesh, spawn_empty, spawn_point_light, ModuleExportsImpl,
 };
@@ -36,7 +37,7 @@ struct State {
   occupied_cells: OccupiedCells,
   snakes: Vec<Snake>,
   food: Vec<Food>,
-  food_sound: AudioAsset,
+  food_sound: AssetHandle,
 }
 
 const CELLS: u32 = 20;
@@ -482,7 +483,7 @@ fn process_snake_food(state: &mut State) {
       despawn(food.light);
       deoccupy_cell(&mut state.occupied_cells, food.pos);
 
-      play_audio(state.food_sound.clone());
+      play_audio(&state.food_sound);
 
       spawn_food(&mut state.food, &mut state.occupied_cells);
 

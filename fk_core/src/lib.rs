@@ -13,9 +13,6 @@ pub struct Entity(pub RawEntity);
 /// See <https://docs.rs/bevy_asset/0.15.3/bevy_asset/struct.AssetIndex.html>
 pub type BevyRawAssetIndex = u64;
 
-#[derive(Clone)]
-pub struct AudioAsset(pub BevyRawAssetIndex);
-
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Rgba(pub u8, pub u8, pub u8, pub u8);

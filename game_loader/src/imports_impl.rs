@@ -1,5 +1,5 @@
 use fk_core::{
-  AudioAsset, BevyRawAssetIndex, Entity, KeyCode, PointLight, RawEntity, Rgba, Shape,
+  BevyRawAssetIndex, Entity, KeyCode, PointLight, RawEntity, Rgba, Shape,
   StableTransform,
 };
 use shared::{abi_stable_types::Str, imports::Imports};
@@ -24,7 +24,7 @@ impl Imports for ModuleImportsImpl {
   }
 
   fn load_audio_asset(path: Str) -> BevyRawAssetIndex {
-    fk::load_audio_asset(unsafe { path.into_str() }).0
+    fk::load_audio_asset(unsafe { path.into_str() })
   }
 
   fn begin_mut_entity_transform(entity: RawEntity) -> StableTransform {
@@ -36,7 +36,7 @@ impl Imports for ModuleImportsImpl {
   }
 
   fn play_audio(asset: BevyRawAssetIndex) -> RawEntity {
-    fk::play_audio(AudioAsset(asset)).0
+    fk::play_audio(asset).0
   }
 
   fn spawn_camera(transform: &StableTransform) -> RawEntity {

@@ -204,7 +204,7 @@ pub fn finish_mut_entity_transform(entity: Entity, mutated: &StableTransform) {
   })
 }
 
-pub fn load_audio_asset(path: &str) -> AudioAsset {
+pub fn load_audio_asset(path: &str) -> BevyRawAssetIndex {
   use_world(|world| {
     let handle: Handle<AudioSource> = world.load_asset(path);
 
@@ -227,13 +227,13 @@ pub fn load_audio_asset(path: &str) -> AudioAsset {
       }
     });
 
-    AudioAsset(handle_index)
+    handle_index
   })
 }
 
-pub fn play_audio(asset: AudioAsset) -> Entity {
+pub fn play_audio(asset: BevyRawAssetIndex) -> Entity {
   use_world(|world| {
-    let handle = ASSET_HANDLES.with_borrow(|handles| handles.get(&asset.0).cloned().unwrap());
+    let handle = ASSET_HANDLES.with_borrow(|handles| handles.get(&asset).cloned().unwrap());
 
     let entity = world
       .spawn((

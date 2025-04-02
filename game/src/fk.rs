@@ -13,9 +13,9 @@ pub fn key_pressed(key: KeyCode) -> bool {
   unsafe { gen_imports::key_pressed(key) }
 }
 
-pub fn load_audio_asset(path: &str) -> AudioAsset {
+pub fn load_audio_asset(path: &str) -> AssetHandle {
   let index = unsafe { gen_imports::load_audio_asset(path.into()) };
-  AudioAsset(index)
+  AssetHandle(index)
 }
 
 pub fn mut_entity_transform<R>(entity: Entity, mutate: impl FnOnce(&mut Transform) -> R) -> R {
@@ -33,7 +33,8 @@ fn finish_mut_entity_transform(entity: Entity, mutated: Transform) {
   unsafe { gen_imports::finish_mut_entity_transform(entity.0, &mutated.into()) }
 }
 
-pub struct AssetHandle(BevyRawAssetIndex);
+// TODO: change field back to private
+pub struct AssetHandle(pub BevyRawAssetIndex);
 
 impl Drop for AssetHandle {
   fn drop(&mut self) {
@@ -41,7 +42,7 @@ impl Drop for AssetHandle {
   }
 }
 
-pub fn play_audio(audio: AudioAsset) -> Entity {
+pub fn play_audio(audio: &AssetHandle) -> Entity {
   let entity = unsafe { gen_imports::play_audio(audio.0) };
   Entity(entity)
 }
