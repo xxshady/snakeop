@@ -9,9 +9,8 @@ use bevy_math::prelude::*;
 use fk_core::{Entity, KeyCode, PointLight, Rgba, Shape};
 use rand::Rng;
 use fk::{
-  AssetHandle,
-  def, despawn, key_pressed, load_audio_asset, mut_entity_transform, play_audio, spawn_camera,
-  spawn_color_mesh, spawn_empty, spawn_point_light, ModuleExportsImpl,
+  AssetHandle, def, despawn, key_pressed, load_audio_asset, mut_entity_transform, play_audio,
+  spawn_camera, spawn_color_mesh, spawn_empty, spawn_point_light, ModuleExportsImpl,
 };
 use shared::exports::Exports;
 use relib_module as _;

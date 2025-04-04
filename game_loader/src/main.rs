@@ -2,21 +2,11 @@ mod imports_impl;
 mod live_reload;
 
 use std::{
-  cell::{Cell, RefCell},
-  marker::PhantomData,
+  cell::RefCell,
   sync::mpsc::{channel, Receiver},
 };
 
-use bevy::{
-  prelude::*,
-  render::{
-    render_asset::RenderAssetUsages,
-    render_resource::{Extent3d, TextureDimension, TextureFormat},
-  },
-  tasks::{TaskPool, TaskPoolBuilder},
-  window::{ClosingWindow, WindowCloseRequested},
-  winit::WinitPlugin,
-};
+use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use fk_core::def;
 use imports_impl::{init_imports, ModuleExports};
@@ -38,9 +28,7 @@ fn main() {
   LIVE_RELOAD_RECEIVER.replace(Some(receiver));
 
   let game_update = |world: &mut World| {
-    let msg = LIVE_RELOAD_RECEIVER.with_borrow(|receiver| {
-      receiver.as_ref().unwrap().try_recv()
-    });
+    let msg = LIVE_RELOAD_RECEIVER.with_borrow(|receiver| receiver.as_ref().unwrap().try_recv());
     if let Ok(msg) = msg {
       match msg {
         LiveReloadMessage::Success => {
@@ -53,7 +41,7 @@ fn main() {
       }
     }
 
-    let game_is_loaded = GAME_INSTANCE.with_borrow(|(instance, _)| { instance.is_some() });
+    let game_is_loaded = GAME_INSTANCE.with_borrow(|(instance, _)| instance.is_some());
     if !game_is_loaded {
       return;
     }
@@ -84,7 +72,6 @@ fn main() {
   };
 
   App::new()
-    .insert_non_send_resource(SingleThreaded(PhantomData))
     .add_plugins((
       DefaultPlugins.set(ImagePlugin::default_nearest()),
       WorldInspectorPlugin::default(),
@@ -154,8 +141,6 @@ fn main() {
 //     RenderAssetUsages::RENDER_WORLD,
 //   )
 // }
-
-struct SingleThreaded(PhantomData<*const ()>);
 
 type Game = Module<ModuleExports>;
 
