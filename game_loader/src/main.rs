@@ -3,6 +3,7 @@ mod live_reload;
 
 use std::{
   cell::RefCell,
+  fs::canonicalize,
   sync::mpsc::{channel, Receiver},
 };
 
@@ -73,7 +74,16 @@ fn main() {
 
   App::new()
     .add_plugins((
-      DefaultPlugins.set(ImagePlugin::default_nearest()),
+      DefaultPlugins
+        .set(ImagePlugin::default_nearest())
+        .set(AssetPlugin {
+          file_path: canonicalize("assets")
+            .unwrap()
+            .to_string_lossy()
+            .to_owned()
+            .to_string(),
+          ..def()
+        }),
       WorldInspectorPlugin::default(),
     ))
     .add_systems(Update, game_update)
@@ -150,7 +160,7 @@ thread_local! {
 
 fn load_game() {
   GAME_INSTANCE.with_borrow_mut(|(instance, _)| {
-    let module = unsafe { load_module("target/debug/game.dll", init_imports) };
+    let module = unsafe { load_module("target/debug/libgame.so", init_imports) };
     let module: Game = module.unwrap();
     instance.replace(module);
   });

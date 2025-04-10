@@ -78,7 +78,7 @@ fn setup() {
   let (mut snakes, mut occupied_cells, mut food) = def();
   spawn_snake(&mut snakes, &mut occupied_cells, 3);
 
-  let food_sound = load_audio_asset("../../assets/sounds/smb_coin.wav");
+  let food_sound = load_audio_asset("sounds/smb_coin.wav");
 
   spawn_food(&mut food, &mut occupied_cells);
 
@@ -139,8 +139,11 @@ fn spawn_snake_part(
   let entity = spawn_color_mesh(
     place_at(pos),
     &Shape::Cuboid(Vec3::splat(1.)),
+    // &Shape::Sphere(0.75),
     Rgba(0, 255, 0, 255),
+    // Rgba(255, 255, 0, 255),
   );
+
   snake.parts.push(SnakePart {
     entity,
     direction,
@@ -329,8 +332,6 @@ enum DoWhat {
   Spawn,
 }
 
-// TEST
-// TODO: should only be available for debug?
 fn control_snake(snakes: &mut [Snake]) {
   let Some(snake) = snakes.first_mut() else {
     return;

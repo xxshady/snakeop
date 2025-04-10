@@ -21,6 +21,7 @@ pub struct Rgba(pub u8, pub u8, pub u8, pub u8);
 pub enum Shape {
   Cuboid(Vec3),
   Plane(f32, f32),
+  Sphere(f32),
 }
 
 #[repr(C)]

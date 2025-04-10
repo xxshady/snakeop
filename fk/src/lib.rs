@@ -8,8 +8,8 @@ use std::{
 use fk_core::{KeyCode, *};
 
 use bevy::{
-  asset::{AssetId, DirectAssetAccessExt, Handle, StrongHandle},
-  audio::{AudioPlayer, AudioSource, PlaybackSettings},
+  asset::{AssetId, AssetPath, DirectAssetAccessExt, Handle, StrongHandle},
+  audio::{AudioPlayer, AudioSource, PlaybackSettings, Volume},
   color::Srgba,
   core_pipeline::core_3d::Camera3d,
   ecs::{entity::Entity as BevyEntity, world::World},
@@ -18,10 +18,7 @@ use bevy::{
     keyboard::{KeyCode as BevyKeyCode, NativeKeyCode},
     ButtonInput,
   },
-  math::{
-    primitives::{Cuboid, Plane3d},
-    Vec3,
-  },
+  math::primitives::{Cuboid, Plane3d, Sphere},
   pbr::{MeshMaterial3d, StandardMaterial},
   render::mesh::{Mesh, Mesh3d, Meshable},
   transform::components::Transform,
@@ -69,6 +66,7 @@ pub fn spawn_color_mesh(transform: Transform, shape: &Shape, color: Rgba) -> Ent
     let mesh: Mesh = match shape {
       Shape::Cuboid(size) => Cuboid::from_size(*size).into(),
       Shape::Plane(width, height) => Plane3d::default().mesh().size(*width, *height).into(),
+      Shape::Sphere(radius) => Sphere::new(*radius).into(),
     };
     let mesh: Handle<Mesh> = world.add_asset(mesh);
     let mesh = Mesh3d(mesh);
@@ -93,6 +91,7 @@ pub fn spawn_image_mesh(transform: Transform, shape: Shape, image: Image) -> Ent
     let mesh: Mesh = match shape {
       Shape::Cuboid(size) => Cuboid::from_size(size).into(),
       Shape::Plane(width, height) => Plane3d::default().mesh().size(width, height).into(),
+      Shape::Sphere(radius) => Sphere::new(radius).into(),
     };
     let mesh: Handle<Mesh> = world.add_asset(mesh);
     let mesh = Mesh3d(mesh);
@@ -238,7 +237,7 @@ pub fn play_audio(asset: BevyRawAssetIndex) -> Entity {
     let entity = world
       .spawn((
         AudioPlayer(Handle::<AudioSource>::Strong(handle)),
-        PlaybackSettings::DESPAWN,
+        PlaybackSettings::DESPAWN.with_volume(Volume::new(0.5)),
       ))
       .id();
 
